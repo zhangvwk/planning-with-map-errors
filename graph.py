@@ -77,7 +77,7 @@ class Graph:
         the optimal trajectory lies in the free space.
         """
         for dest_idx in range(len(self.samples)):
-            if dest_idx != src_idx and dest_idx not in self.edges[src_idx]:
+            if dest_idx != src_idx:
                 cost, traj = self.compute_path(
                     self.samples[src_idx], self.samples[dest_idx]
                 )
@@ -89,7 +89,7 @@ class Graph:
         return self.planner.compute_path(u, v)
 
     def intersects(self, traj):
-        """Return true if a trajectory lies in the free space."""
+        """Return false if a trajectory lies in the free space."""
         for point_idx in range(len(traj) - 1):
             p = Point(traj[point_idx][0], traj[point_idx][1])
             p_ = Point(traj[point_idx + 1][0], traj[point_idx + 1][1])
