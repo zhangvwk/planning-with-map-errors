@@ -17,7 +17,10 @@ class LQRPlanner:
         """
         Ncontrol = B.shape[1]
         self.Q = Q
-        self.R = np.array(R).reshape((Ncontrol,))
+        if Ncontrol==1:
+            self.R = np.array(R).reshape((Ncontrol,))
+        else:
+            self.R = R
         self.A = A
         self.B = B
 
