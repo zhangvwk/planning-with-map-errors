@@ -26,6 +26,9 @@ class Point:
     def __rmul__(self, c):
         return self * c
 
+    def __truediv__(self, c):
+        return self * (1.0 / c)
+
     def __neg__(self):
         return -1 * self
 
@@ -40,6 +43,14 @@ class Point:
 
     def dot(self, p2):
         return np.array((self.x, self.y)).dot(np.array((p2.x, p2.y)))
+
+    def is_in_triangle(self, p1, p2, p3):
+        o1 = GeoTools.orientation(p1, self, p2)
+        o2 = GeoTools.orientation(p2, self, p3)
+        o3 = GeoTools.orientation(p3, self, p1)
+        all_CCW = o1 == 2 and o2 == 2 and o3 == 2
+        all_CW = o1 == 1 and o2 == 1 and o3 == 1
+        return all_CCW or all_CW
 
     def plot(self, c="ro", size=8):
         plt.plot(self.x, self.y, c, markersize=size)
@@ -88,8 +99,21 @@ class Polygon:
                     return False
         return True
 
-    def plot(self):
+    def intersects_triangle(self, p1, p2, p3):
+        for p in self.vertices:
+            if p.is_in_triangle(p1, p2, p3):
+                return True
+        return False
+
+    def plot(self, show_edges_id=True):
         plt.fill(self.x_list, self.y_list, alpha=0.75, label=self.id)
+        for edge_idx in range(len(self.edges)):
+            edge = self.edges[edge_idx]
+            mid_point = edge[0] + (edge[1] - edge[0]) / 2
+            plt.annotate(
+                str(edge_idx), [mid_point.x, mid_point.y], fontsize=10, alpha=0.75
+            )
+        plt.legend(loc="best", fontsize=20)
 
     def get_min_dist(self, p):
         min_dist = float("inf")
@@ -126,6 +150,7 @@ class Rectangle(Polygon):
     """
 
     def __init__(self, id_, x, y, lgth, wdth, angle):
+        assert id_ >= 0
         self.id = id_
         self.x = x
         self.y = y
@@ -137,6 +162,7 @@ class Rectangle(Polygon):
         self.errors = [[0, 0] for _ in range(4)]
 
     def compute_vertices(self):
+        """Return the vertices in CCW order."""
         return [
             Point(self.x, self.y),
             Point(
@@ -154,6 +180,7 @@ class Rectangle(Polygon):
         ]
 
     def set_errors(self, line_i, bound_l, bound_r):
+        assert line_i < 4
         self.errors[line_i] = [bound_l, bound_r]
 
     def contains(self, p):
@@ -168,45 +195,25 @@ class Rectangle(Polygon):
                 return True
         return False
 
-
-class Environment2D:
-    """Environment2D class.
-    Instantiated with the range in x and in y.
-    Its building blocks are Rectangle objects.
-    """
-
-    def __init__(self, x_lims, y_lims):
-        self.x_lims = x_lims
-        self.y_lims = y_lims
-        self.rectangles = []
-
-    def add_rectangle(self, rectangle):
-        self.rectangles.append(rectangle)
-
-    def plot(self, figsize=(10, 10)):
-        plt.figure(figsize=figsize)
-        plt.xlim(self.x_lims)
-        plt.ylim(self.y_lims)
-        for rectangle in self.rectangles:
-            rectangle.plot()
-        plt.legend(loc="best")
-
-    def plot_min_proj(self, p):
-        self.plot()
-        for rectangle in self.rectangles:
-            p.plot()
-            min_dist, min_proj = rectangle.get_min_dist(p)
-            min_proj.plot("mo", size=4)
-            p.plot_edge(min_proj)
-
-    def contains(self, p):
-        for rectangle in self.rectangles:
-            if rectangle.contains(p):
-                return True
-        return False
-
-    def is_intersected(self, line):
-        for rectangle in self.rectangles:
-            if rectangle.is_intersected(line):
-                return True
-        return False
+    def get_lines_possibly_seen(self, p):
+        num_edges = len(self.edges)
+        for edge_idx in range(num_edges):
+            edge_idx_prev = (edge_idx - 1) % num_edges
+            edge_idx_next = (edge_idx + 1) % num_edges
+            edge_curr = self.edges[edge_idx]
+            edge_next = self.edges[edge_idx_next]
+            dot_prod = (edge_curr[1] - edge_curr[0]).dot(p - edge_curr[0])
+            norm_sq = (edge_curr[1] - edge_curr[0]).norm() ** 2
+            facing_edge = 0 <= dot_prod <= norm_sq
+            on_right = dot_prod > norm_sq
+            on_correct_side = (edge_next[1] - edge_next[0]).dot(p - edge_next[0]) <= 0
+            if facing_edge:
+                if on_correct_side:
+                    return [edge_idx]
+                else:
+                    return [(edge_idx + 2) % num_edges]
+            if on_correct_side:
+                if on_right:
+                    return [edge_idx, edge_idx_next]
+                else:
+                    return [edge_idx_prev, edge_idx]
