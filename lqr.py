@@ -39,7 +39,7 @@ class LQRPlanner:
         """
         return self.lqr_gain
 
-    def compute_path(self, u, v, max_iter=1000, tol=1e-6):
+    def compute_path(self, u, v, max_iter=1000, tol=1e-3):
         """Compute a path from u to v using an LQR regulator
 
         Args:
