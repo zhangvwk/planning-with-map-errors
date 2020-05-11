@@ -6,7 +6,6 @@ import scipy.spatial
 
 # Custom libraries
 from shapes import Point
-from lqr import LQRPlanner
 
 
 class KDTree:
@@ -36,6 +35,8 @@ class Graph:
         x_init (np.array): Initial state.
         x_range (np.array): Bounds of the state space, of shape (d, 2).
         env (Environment): Environment object defining obstacles.
+        planner (LQRPlanner): (Already instantiated) planner for optimal control
+            between two nodes.
 
     Attributes:
         x_init (np.array): Initial state.
@@ -51,14 +52,13 @@ class Graph:
         skdtree (scipy.spatial.cKDTree): KDTree of the 2D coordinates of self.samples.
     """
 
-    def __init__(self, x_init, x_range, environment):
+    def __init__(self, x_init, x_range, environment, planner):
         self.x_init = x_init
         self.d = len(x_init)
         self.init_samples()
         self.x_range = x_range
         self.env = environment
-        # self.planner = LQRPlanner(Q, R, A, B)
-        self.planner = LQRPlanner()
+        self.planner = planner
 
     def init_samples(self):
         """Initializes the samples (nodes) and the edges.
