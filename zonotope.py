@@ -1,6 +1,4 @@
 import numpy as np
-import polytope as pc
-import matplotlib.pyplot as plt
 
 
 class Zonotope:
