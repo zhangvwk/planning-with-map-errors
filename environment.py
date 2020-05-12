@@ -60,10 +60,8 @@ class Environment2D:
         lines_seen_dict = {}
         for rectangle_id in self.rectangles:
             rectangle = self.rectangles[rectangle_id]
-
             # All the potentially seen lines
             lines_possibly_seen = rectangle.get_lines_possibly_seen(p)
-
             # Get rid of false positives
             lines_seen = self.curate_lines(lines_possibly_seen, rectangle_id, p)
             if lines_seen:

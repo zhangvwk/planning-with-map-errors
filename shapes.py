@@ -45,9 +45,9 @@ class Point:
         return np.array((self.x, self.y)).dot(np.array((p2.x, p2.y)))
 
     def is_in_triangle(self, p1, p2, p3):
-        o1 = GeoTools.orientation(p1, self, p2)
-        o2 = GeoTools.orientation(p2, self, p3)
-        o3 = GeoTools.orientation(p3, self, p1)
+        o1 = GeoTools.orientation(self, p2, p1)
+        o2 = GeoTools.orientation(self, p3, p2)
+        o3 = GeoTools.orientation(self, p1, p3)
         all_CCW = o1 == 2 and o2 == 2 and o3 == 2
         all_CW = o1 == 1 and o2 == 1 and o3 == 1
         return all_CCW or all_CW
@@ -99,9 +99,22 @@ class Polygon:
                     return False
         return True
 
+    def is_intersected(self, line):
+        for edge in self.edges:
+            if GeoTools.doIntersect(edge[0], edge[1], line[0], line[1]):
+                return True
+        return False
+
     def intersects_triangle(self, p1, p2, p3):
+        """Return true if self intersects with triangle formed by (p1, p2, p3).
+        First check if a vertex of self is within the triangle.
+        Second check if an edge of self intersects with the triangle.
+        """
         for p in self.vertices:
             if p.is_in_triangle(p1, p2, p3):
+                return True
+        for triangle_edge in [[p1, p2], [p1, p3], [p2, p3]]:
+            if self.is_intersected(triangle_edge):
                 return True
         return False
 
@@ -188,12 +201,6 @@ class Rectangle(Polygon):
         return (0 <= (B - A).dot(p - A) <= (B - A).norm() ** 2) and (
             0 <= (C - B).dot(p - B) <= (C - B).norm() ** 2
         )
-
-    def is_intersected(self, line):
-        for edge in self.edges:
-            if GeoTools.doIntersect(edge[0], edge[1], line[0], line[1]):
-                return True
-        return False
 
     def get_lines_possibly_seen(self, p):
         num_edges = len(self.edges)
