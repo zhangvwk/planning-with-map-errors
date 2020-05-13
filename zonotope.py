@@ -6,13 +6,13 @@ class Zonotope:
         self.c = center
         self.G = generators
         self.Sig = cov
-        assert self.G.shape[0]==2
-        assert self.c.shape[0]==2
-        assert self.Sig.shape==(2,2)
+        assert self.G.shape[0] == 2
+        assert self.c.shape[0] == 2
+        assert self.Sig.shape == (2, 2)
 
     def __add__(self, other):
         c = self.c + other.c
-        G = np.hstack((self.G, other.G.reshape(2,-1)))
+        G = np.hstack((self.G, other.G.reshape(2, -1)))
         Sig = self.Sig + other.Sig
         return Zonotope(c, G, Sig)
 
@@ -29,18 +29,20 @@ class Zonotope:
         """
         n = self.G.shape[0]
         e = self.G.shape[1]
-        Cp = np.zeros((e,n))
+        Cp = np.zeros((e, n))
         dp = np.zeros((e,))
         dm = np.zeros((e,))
         for i in range(e):
-            g = self.G[:,i] # extract generator i
-            gg = np.array([g[1], -g[0]]) # compute the cross product nX()
+            g = self.G[:, i]  # extract generator i
+            gg = np.array([g[1], -g[0]])  # compute the cross product nX()
             Cpi = gg / np.linalg.norm(gg)
             delta_di = 0
             for j in range(e):
-                delta_di += np.fabs(Cpi.dot(self.G[:,j])) # dot product with all generators
+                delta_di += np.fabs(
+                    Cpi.dot(self.G[:, j])
+                )  # dot product with all generators
 
-            Cp[i,:] = Cpi
+            Cp[i, :] = Cpi
             dp[i] = Cpi.dot(self.c) + delta_di
             dm[i] = -Cpi.dot(self.c) + delta_di
 
@@ -51,14 +53,14 @@ class Zonotope:
         This is the girard method as described in:
         Reachability of Uncertain Linear Systems Using Zonotopes (2005)
         """
-        if self.G.shape[1]<4:
-            return # need at least 4 generators
-        norm_diff = np.linalg.norm(self.G, ord=1, axis=0) - \
-            np.linalg.norm(self.G, ord=np.inf, axis=0)
+        if self.G.shape[1] < 4:
+            return  # need at least 4 generators
+        norm_diff = np.linalg.norm(self.G, ord=1, axis=0) - np.linalg.norm(
+            self.G, ord=np.inf, axis=0
+        )
         select = np.argpartition(norm_diff, 4)[:4]
 
-        chosen_g = self.G[:,select]
+        chosen_g = self.G[:, select]
         coeff = np.sum(np.fabs(chosen_g), axis=1)
         self.G = np.delete(self.G, select, axis=1)
-        self.G = np.hstack((self.G,
-                            np.array([ [coeff[0], 0], [0, coeff[1]] ]) ))
+        self.G = np.hstack((self.G, np.array([[coeff[0], 0], [0, coeff[1]]])))
