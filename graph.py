@@ -51,6 +51,7 @@ class Graph:
                 {v: [(cost(u,v), traj(uv))]}
             }
         skdtree (scipy.spatial.cKDTree): KDTree of the 2D coordinates of self.samples.
+        r (float): Optimal cost threshold.
         lines_seen (list): list where the element of the ith idx is a dictionary containing
             the lines belonging to env that are seen by the ith vertex of the graph.
     """
@@ -70,6 +71,7 @@ class Graph:
         self.samples[0, :] = self.x_init
         self.edges = collections.defaultdict(lambda: collections.defaultdict(tuple))
         self.lines_seen = []
+        self.r = None
         self.update_kdtree()
 
     def update_kdtree(self):
@@ -91,6 +93,7 @@ class Graph:
             max_neighbors (int or None): Maximum number of neighbors to
                 consider per node. If set to None, equivalent to no cap.
         """
+        self.r = r
         t0 = time.time()
         self.sample_free(n)
         t1 = time.time()
