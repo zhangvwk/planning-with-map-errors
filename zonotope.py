@@ -58,7 +58,6 @@ class Zonotope:
         select = np.argpartition(norm_diff, 4)[:4]
 
         chosen_g = self.G[:,select]
-        print(chosen_g.shape)
         coeff = np.sum(np.fabs(chosen_g), axis=1)
         self.G = np.delete(self.G, select, axis=1)
         self.G = np.hstack((self.G,
