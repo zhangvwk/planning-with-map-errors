@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import collections
 import scipy.spatial
+import time
 
 # Custom libraries
 from utils import GeoTools
@@ -81,7 +82,7 @@ class Graph:
         """
         self.init_samples()
 
-    def build(self, n, r, max_neighbors=10):
+    def build(self, n, r, max_neighbors=10, timing=True):
         """Build the graph.
         Args:
             n (int): Number of nodes to sample.
@@ -90,11 +91,18 @@ class Graph:
             max_neighbors (int or None): Maximum number of neighbors to
                 consider per node. If set to None, equivalent to no cap.
         """
+        t0 = time.time()
         self.sample_free(n)
+        t1 = time.time()
+        if timing:
+            print("Sampling took: {:0.2f} s.".format(t1 - t0))
         if max_neighbors is None:
             max_neighbors = len(self.samples)
         for src_idx in range(len(self.samples)):
             self.connect(src_idx, r, max_neighbors)
+        t2 = time.time()
+        if timing:
+            print("Connecting took: {:0.2f} s.".format(t2 - t1))
 
     def sample_free(self, n):
         """Sample n nodes in the free space."""
