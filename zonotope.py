@@ -45,3 +45,21 @@ class Zonotope:
             dm[i] = -Cpi.dot(self.c) + delta_di
 
         return np.vstack((Cp, -Cp)), np.concatenate((dp, dm))
+
+    def reduce(self):
+        """Reduce the zonotope by replacing 4 well chosen generators by 2 generators
+        This is the girard method as described in:
+        Reachability of Uncertain Linear Systems Using Zonotopes (2005)
+        """
+        if self.G.shape[1]<4:
+            return # need at least 4 generators
+        norm_diff = np.linalg.norm(self.G, ord=1, axis=0) - \
+            np.linalg.norm(self.G, ord=np.inf, axis=0)
+        select = np.argpartition(norm_diff, 4)[:4]
+
+        chosen_g = self.G[:,select]
+        print(chosen_g.shape)
+        coeff = np.sum(np.fabs(chosen_g), axis=1)
+        self.G = np.delete(self.G, select, axis=1)
+        self.G = np.hstack((self.G,
+                            np.array([ [coeff[0], 0], [0, coeff[1]] ]) ))
