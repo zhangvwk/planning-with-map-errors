@@ -5,7 +5,7 @@ import collections
 import scipy.spatial
 
 # Custom libraries
-from shapes import Point
+from utils import GeoTools
 
 
 class KDTree:
@@ -99,7 +99,7 @@ class Graph:
         new_samples = []
         while num_added < n:
             sample = self.sample_in_range()
-            if not self.env.contains(Point(sample[0], sample[1])):
+            if not self.env.contains(GeoTools.array2point(sample)):
                 new_samples.append(sample)
                 num_added += 1
         self.add_sample(new_samples)
@@ -143,8 +143,8 @@ class Graph:
     def intersects(self, traj):
         """Return false if a trajectory lies in the free space."""
         for point_idx in range(len(traj) - 1):
-            p = Point(traj[point_idx][0], traj[point_idx][1])
-            p_ = Point(traj[point_idx + 1][0], traj[point_idx + 1][1])
+            p = GeoTools.array2point(traj[point_idx])
+            p_ = GeoTools.array2point(traj[point_idx + 1])
             if self.env.is_intersected([p, p_]):
                 return True
         return False

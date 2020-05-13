@@ -38,11 +38,14 @@ class Point:
     def __str__(self):
         return "({}, {})".format(self.x, self.y)
 
+    def as_array(self):
+        return np.array([self.x, self.y])
+
     def norm(self):
-        return np.linalg.norm((self.x, self.y))
+        return np.linalg.norm(self.as_array())
 
     def dot(self, p2):
-        return np.array((self.x, self.y)).dot(np.array((p2.x, p2.y)))
+        return self.as_array().dot(p2.as_array())
 
     def is_in_triangle(self, p1, p2, p3):
         o1 = GeoTools.orientation(self, p2, p1)
@@ -82,7 +85,7 @@ class Polygon:
         if not as_array:
             return self.vertices
         else:
-            return np.array([np.array([v.x, v.y]) for v in self.vertices])
+            return np.array([v.as_array() for v in self.vertices])
 
     def store_edges(self):
         self.edges = []
@@ -126,7 +129,14 @@ class Polygon:
             plt.annotate(
                 str(edge_idx), [mid_point.x, mid_point.y], fontsize=10, alpha=0.75
             )
-        plt.legend(loc="best", fontsize=20)
+        plt.legend(
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.0),
+            ncol=10,
+            fancybox=True,
+            shadow=True,
+            fontsize="small",
+        )
 
     def get_min_dist(self, p):
         min_dist = float("inf")
