@@ -50,6 +50,8 @@ class Graph:
                 {v: [(cost(u,v), traj(uv))]}
             }
         skdtree (scipy.spatial.cKDTree): KDTree of the 2D coordinates of self.samples.
+        lines_seen (list): list where the element of the ith idx is a dictionary containing
+            the lines belonging to env that are seen by the ith vertex of the graph.
     """
 
     def __init__(self, x_init, x_range, environment, planner):
@@ -66,6 +68,7 @@ class Graph:
         self.samples = np.zeros((1, self.d))
         self.samples[0, :] = self.x_init
         self.edges = collections.defaultdict(lambda: collections.defaultdict(tuple))
+        self.lines_seen = []
         self.update_kdtree()
 
     def update_kdtree(self):
@@ -148,6 +151,13 @@ class Graph:
             if self.env.is_intersected([p, p_]):
                 return True
         return False
+
+    def update_lines_seen(self):
+        """Update the lines seen by each vertex of the graph."""
+        for sample_idx in range(len(self.samples)):
+            self.lines_seen.append(
+                self.env.get_lines_seen(GeoTools.array2point(self.samples[sample_idx]))
+            )
 
     def plot(self, plot_edges=True):
         """Plot the the nodes and edges of the graph.
