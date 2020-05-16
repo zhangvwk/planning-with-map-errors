@@ -1,7 +1,10 @@
 # Standard libraries
 import matplotlib.pyplot as plt
+import numpy as np
 
+# Custom libraries
 import shapes
+
 
 class GeoTools:
     """Utility class for geometry operations.
@@ -63,6 +66,21 @@ class GeoTools:
     @staticmethod
     def array2point(array):
         return shapes.Point(array[0], array[1])
+
+
+class TestUtil:
+    @staticmethod
+    def check_square(mat):
+        assert mat.shape[0] == mat.shape[1]
+
+    @staticmethod
+    def check_symmetric(mat, rtol=1e-05, atol=1e-08):
+        TestUtil.check_square(mat)
+        assert np.allclose(mat, mat.T, rtol=rtol, atol=atol)
+
+    @staticmethod
+    def check_same_size(vect_1, vect_2):
+        assert vect_1.shape[0] == vect_2.shape[0]
 
 
 class PlotTools:

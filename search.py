@@ -1,3 +1,4 @@
+# Standard libraries
 import numpy as np
 import collections
 
@@ -36,6 +37,9 @@ class Searcher:
         self.goal_region = goal_region
 
     def is_valid_goal(self):
+        raise NotImplementedError
+
+    def reached_goal(self):
         raise NotImplementedError
 
     def remove_dominated(self):

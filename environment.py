@@ -103,6 +103,7 @@ class Environment2D:
         plt.ylim(self.y_lims)
         for rectangle_id, rectangle in self.rectangles.items():
             rectangle.plot()
+        plt.gca().set_aspect("equal", adjustable="box")
 
     def plot_min_proj(self, p):
         self.plot()
