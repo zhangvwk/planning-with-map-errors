@@ -6,6 +6,7 @@ from scipy.constants import degree
 
 # Custom libraries
 from utils import GeoTools
+from zonotope import Zonotope
 
 
 class Point:
@@ -183,6 +184,7 @@ class Rectangle(Polygon):
         self.vertices = self.compute_vertices()
         super().__init__(self.id, self.vertices)
         self.errors = [[0, 0] for _ in range(4)]
+        self.as_poly = self.to_poly()  # store it as a Polytope object as well
 
     def compute_vertices(self):
         """Return the vertices in CCW order."""
@@ -207,12 +209,16 @@ class Rectangle(Polygon):
         self.errors[line_i] = [bound_l, bound_r]
 
     def contains(self, p):
+        """Return True if point p lies within self."""
         A, B, C = self.vertices[:3]
         return (0 <= (B - A).dot(p - A) <= (B - A).norm() ** 2) and (
             0 <= (C - B).dot(p - B) <= (C - B).norm() ** 2
         )
 
     def get_lines_possibly_seen(self, p):
+        """Return the list of the subset of self.edges that are
+        possibly seen by point p.
+        """
         num_edges = len(self.edges)
         for edge_idx in range(num_edges):
             edge_idx_prev = (edge_idx - 1) % num_edges
@@ -234,3 +240,16 @@ class Rectangle(Polygon):
                     return [edge_idx, edge_idx_next]
                 else:
                     return [edge_idx_prev, edge_idx]
+
+    def to_zonotope(self):
+        """Convert to a Zonotope object."""
+        pA, pB, pC, _ = self.vertices
+        gen_1 = (pB - pA) / 2
+        gen_2 = (pC - pB) / 2
+        center = (pA + gen_1 + gen_2).as_array()
+        generators = np.concatenate(([gen_1.as_array()], [gen_2.as_array()])).T
+        return Zonotope(center, generators, np.zeros((2, 2)))
+
+    def to_poly(self):
+        """Convert to a Polytope object."""
+        return self.to_zonotope().to_poly()

@@ -98,7 +98,6 @@ class Environment2D:
         return False
 
     def plot(self, figsize=(10, 10)):
-        plt.figure(figsize=figsize)
         plt.xlim(self.x_lims)
         plt.ylim(self.y_lims)
         for rectangle_id, rectangle in self.rectangles.items():
