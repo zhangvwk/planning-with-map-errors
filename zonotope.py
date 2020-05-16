@@ -1,4 +1,6 @@
 import numpy as np
+import polytope as pc
+from scipy.special import erf
 
 
 class Zonotope:
@@ -48,6 +50,10 @@ class Zonotope:
 
         return np.vstack((Cp, -Cp)), np.concatenate((dp, dm))
 
+    def to_poly(self):
+        A, b = self.to_H()
+        return pc.Polytope(A, b)
+
     def reduce(self):
         """Reduce the zonotope by replacing 4 well chosen generators by 2 generators
         This is the girard method as described in:
@@ -64,3 +70,47 @@ class Zonotope:
         coeff = np.sum(np.fabs(chosen_g), axis=1)
         self.G = np.delete(self.G, select, axis=1)
         self.G = np.hstack((self.G, np.array([[coeff[0], 0], [0, coeff[1]]])))
+
+    def get_confidence_sets(self, scaling_factors):
+        """
+        Compute a list of confidence set associated with the scaling factors.
+        Each element of that list is a zonotope with zero covariance,
+        ie a deteriminstic zonotope.
+        See Matthias' thesis, p. 96.
+        """
+        # conpute the generators of the G-zonotope
+        vals, vecs = np.linalg.eig(self.Sig)
+        gs = np.sqrt(vals) * vecs
+        # get the zonotope representation of each confidence set
+        confid_sets = []
+        for i in range(scaling_factors.shape[0]):
+            m = scaling_factors[i]
+            z = Zonotope(np.zeros((2,)), m*gs, np.zeros((2,2))) + self
+            z.Sig = np.zeros((2,2))
+            confid_sets.append(z)
+        return confid_sets
+
+    def get_inter_prob(self, X, scaling_factors):
+        '''
+        Compute intersection probability
+        In the notation of Matthias' thesis, the scaling_factors are:
+            gamma=m(0), m(1), ..., m(k-1)
+        '''
+        n = 2
+        k = scaling_factors.shape[0]
+        X = X.to_poly()
+
+        h = (2.*np.pi)**(-n/2.) * np.linalg.det(self.Sig)**(-0.5) * \
+            np.exp(-0.5*np.array(scaling_factors)**2.)
+
+        confid_sets = self.get_confidence_sets(scaling_factors)
+        V = np.zeros((k,))
+        for i in range(k):
+            V[i] = confid_sets[i].to_poly().intersect(X).volume
+
+        prob = 1 - erf(scaling_factors[0]/np.sqrt(2.)) ** (2.*n) + \
+               h[1]*V[0] - h[k-1]*V[k-1]
+        for i in range(k-1):
+            prob += (h[i+1]-h[i]) * V[i]
+
+        return min(prob, 1.)
