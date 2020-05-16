@@ -23,16 +23,38 @@ class Environment2D:
         for rectangle in list_rectangles:
             self.add_rectangle(rectangle)
 
+    def is_valid_id(self, rectangle):
+        return rectangle.id not in self.rectangles
+
+    def is_valid_rectangle(self, rectangle):
+        for i, rec in self.rectangles.items():
+            vol = rectangle.as_poly.intersect(rec.as_poly).volume
+            if vol < 1e-5:
+                continue
+            else:
+                print(
+                    "Rectangle collides with existing rectangle of ID {}.".format(
+                        rec.id
+                    )
+                )
+                return False
+        return True
+
     def add_rectangle(self, rectangle):
         try:
-            assert rectangle.id not in self.rectangles
-            self.rectangles[rectangle.id] = rectangle
+            assert self.is_valid_id(rectangle)
         except AssertionError:
             print(
                 "ID {} already exists inside environment! Please choose another ID.".format(
                     rectangle.id
                 )
             )
+            raise
+        try:
+            assert self.is_valid_rectangle(rectangle)
+            self.rectangles[rectangle.id] = rectangle
+        except AssertionError:
+            print("Please choose another rectangle.")
             raise
 
     def contains(self, p):
