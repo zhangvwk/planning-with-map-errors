@@ -110,7 +110,7 @@ class Zonotope:
 
         prob = 1 - erf(scaling_factors[0]/np.sqrt(2.)) ** (2.*n) + \
                h[1]*V[0] - h[k-1]*V[k-1]
-        for i in range(k-1):
+        for i in range(1,k-1):
             prob += (h[i+1]-h[i]) * V[i]
 
         return min(prob, 1.)
