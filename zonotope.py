@@ -90,6 +90,7 @@ class Zonotope:
         gs = np.sqrt(vals) * vecs
         # get the zonotope representation of each confidence set
         confid_sets = []
+        scaling_factors = np.atleast_1d(scaling_factors) # to handle scalar case
         for i in range(scaling_factors.shape[0]):
             m = scaling_factors[i]
             z = Zonotope(np.zeros((2,)), m*gs, np.zeros((2,2))) + self
@@ -121,3 +122,13 @@ class Zonotope:
             prob += (h[i+1]-h[i]) * V[i]
 
         return min(prob, 1.)
+
+    def intersect(self, Z, m):
+        """Check the intersection between 2 (probabilistic) zonotopes
+        m is the scaling factor for the confidence set
+        """
+        # These are deterministic zonotopes
+        s1 = self.get_confidence_sets(m)[0]
+        s2 = Z.get_confidence_sets(m)[0]
+        return not pc.is_empty(s1.to_poly().intersect(s2.to_poly()))
+
