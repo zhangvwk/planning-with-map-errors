@@ -67,6 +67,13 @@ class GeoTools:
     def array2point(array):
         return shapes.Point(array[0], array[1])
 
+    @staticmethod
+    def sample_in_range(x_range):
+        """Sample a node uniformly in the state space."""
+        return (x_range[:, 1] - x_range[:, 0]) * np.random.uniform(
+            size=x_range.shape[0]
+        ) + x_range[:, 0]
+
 
 class TestUtil:
     @staticmethod
