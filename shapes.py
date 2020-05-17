@@ -174,7 +174,6 @@ class Rectangle(Polygon):
     """
 
     def __init__(self, id_, x, y, lgth, wdth, angle):
-        assert id_ >= 0
         self.id = id_
         self.x = x
         self.y = y
