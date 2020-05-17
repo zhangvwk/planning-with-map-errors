@@ -130,14 +130,7 @@ class Polygon:
             plt.annotate(
                 str(edge_idx), [mid_point.x, mid_point.y], fontsize=10, alpha=0.75
             )
-        plt.legend(
-            loc="lower center",
-            bbox_to_anchor=(0.5, 1.0),
-            ncol=10,
-            fancybox=True,
-            shadow=True,
-            fontsize="small",
-        )
+        plt.annotate(str(self.id), self.get_center_gen()[0], fontsize=12, weight='bold')
 
     def get_min_dist(self, p):
         min_dist = float("inf")
@@ -240,13 +233,17 @@ class Rectangle(Polygon):
                 else:
                     return [edge_idx_prev, edge_idx]
 
-    def to_zonotope(self):
-        """Convert to a Zonotope object."""
+    def get_center_gen(self):
         pA, pB, pC, _ = self.vertices
         gen_1 = (pB - pA) / 2
         gen_2 = (pC - pB) / 2
         center = (pA + gen_1 + gen_2).as_array()
         generators = np.concatenate(([gen_1.as_array()], [gen_2.as_array()])).T
+        return center, generators
+
+    def to_zonotope(self):
+        """Convert to a Zonotope object."""
+        center, generators = self.get_center_gen()
         return Zonotope(center, generators, np.zeros((2, 2)))
 
     def to_poly(self):
