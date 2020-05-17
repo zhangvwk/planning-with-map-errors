@@ -58,7 +58,7 @@ class Graph:
 
     def __init__(self, x_init, x_range, environment, planner):
         self.x_init = x_init
-        self.d = len(x_init)
+        self.dim = len(x_init)
         self.init_samples()
         self.x_range = x_range
         self.env = environment
@@ -67,7 +67,7 @@ class Graph:
     def init_samples(self):
         """Initializes the samples (nodes) and the edges.
         """
-        self.samples = np.zeros((1, self.d))
+        self.samples = np.zeros((1, self.dim))
         self.samples[0, :] = self.x_init
         self.edges = collections.defaultdict(lambda: collections.defaultdict(tuple))
         self.lines_seen = []
@@ -112,18 +112,12 @@ class Graph:
         num_added = 0
         new_samples = []
         while num_added < n:
-            sample = self.sample_in_range()
+            sample = GeoTools.sample_in_range(self.x_range)
             if not self.env.contains(GeoTools.array2point(sample)):
                 new_samples.append(sample)
                 num_added += 1
         self.add_sample(new_samples)
         self.update_kdtree()
-
-    def sample_in_range(self):
-        """Sample a node uniformly in the state space."""
-        return (self.x_range[:, 1] - self.x_range[:, 0]) * np.random.uniform(
-            size=self.d
-        ) + self.x_range[:, 0]
 
     def add_sample(self, new_samples):
         """Add a sample to the current set of samples."""
