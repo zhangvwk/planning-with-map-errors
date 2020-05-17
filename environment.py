@@ -85,16 +85,21 @@ class Environment2D:
                 return False
         return True
 
-    def add_obstacles(self, num_obs, lgth, wdth, ang=None):
+    def add_obstacles(self, num_obs, lgth, wdth, ang=None, max_iter=1e3):
         """Add num_obs obstacles of certain length and width, within
         the limits of the current environment.
         If ang is not specified, will pick a random rectangle angle.
         """
         max_id = max(self.rectangles)
         added = 0
+        it = 0
         while added < num_obs:
+            it += 1
+            if it > max_iter:
+                print("Could fit {} such rectangles in the environment.".format(added))
+                break
             x, y = GeoTools.sample_in_range(self.x_range)
-            if ang is not None:
+            if ang is None:
                 rectangle = Rectangle(
                     max_id + added + 1, x, y, lgth, wdth, np.random.uniform(0, 360)
                 )
