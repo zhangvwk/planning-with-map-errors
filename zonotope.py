@@ -2,6 +2,11 @@ import numpy as np
 import polytope as pc
 from scipy.special import erf
 
+def area(x, y):
+    return 0.5*np.abs( \
+           np.dot(x,np.roll(y,1)) - \
+           np.dot(y,np.roll(x,1)) \
+           )
 
 class Zonotope:
     def __init__(self, center, generators, cov):
@@ -114,7 +119,10 @@ class Zonotope:
         confid_sets = self.get_confidence_sets(scaling_factors)
         V = np.zeros((k,))
         for i in range(k):
-            V[i] = confid_sets[i].to_poly().intersect(X).volume
+            p = confid_sets[i].to_poly().intersect(X)
+            XY = pc.extreme(p)
+            if XY is not None:
+               V[i] = area(XY[:,0], XY[:,1])
 
         prob = 1 - erf(scaling_factors[0]/np.sqrt(2.)) ** (2.*n) + \
                h[1]*V[0] - h[k-1]*V[k-1]
