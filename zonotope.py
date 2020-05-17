@@ -12,6 +12,9 @@ class Zonotope:
         assert self.c.shape[0] == 2
         assert self.Sig.shape == (2, 2)
 
+    def get_order(self):
+        return self.G.shape[1] / 2
+
     def __add__(self, other):
         c = self.c + other.c
         G = np.hstack((self.G, other.G.reshape(2, -1)))
@@ -54,22 +57,26 @@ class Zonotope:
         A, b = self.to_H()
         return pc.Polytope(A, b)
 
-    def reduce(self):
+    def reduce(self, target_order=1.):
         """Reduce the zonotope by replacing 4 well chosen generators by 2 generators
         This is the girard method as described in:
         Reachability of Uncertain Linear Systems Using Zonotopes (2005)
         """
-        if self.G.shape[1] < 4:
-            return  # need at least 4 generators
-        norm_diff = np.linalg.norm(self.G, ord=1, axis=0) - np.linalg.norm(
-            self.G, ord=np.inf, axis=0
-        )
-        select = np.argpartition(norm_diff, 4)[:4]
+        # keep reducing as long as the order is greater than the target order
+        while self.get_order() > target_order:
+            # need at least 4 generators
+            if self.G.shape[1] < 4:
+                return
 
-        chosen_g = self.G[:, select]
-        coeff = np.sum(np.fabs(chosen_g), axis=1)
-        self.G = np.delete(self.G, select, axis=1)
-        self.G = np.hstack((self.G, np.array([[coeff[0], 0], [0, coeff[1]]])))
+            norm_diff = np.linalg.norm(self.G, ord=1, axis=0) - np.linalg.norm(
+                self.G, ord=np.inf, axis=0
+            )
+            select = np.argpartition(norm_diff, 4)[:4]
+
+            chosen_g = self.G[:, select]
+            coeff = np.sum(np.fabs(chosen_g), axis=1)
+            self.G = np.delete(self.G, select, axis=1)
+            self.G = np.hstack((self.G, np.array([[coeff[0], 0], [0, coeff[1]]])))
 
     def get_confidence_sets(self, scaling_factors):
         """
