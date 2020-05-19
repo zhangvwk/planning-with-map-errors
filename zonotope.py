@@ -113,10 +113,14 @@ class Zonotope:
         k = scaling_factors.shape[0]
         X = X.to_poly()
 
+        confid_sets = self.get_confidence_sets(scaling_factors)
+        # append m=0 to the set of scaling factors
+        scaling_factors = np.append(scaling_factors, 0.)
+
         h = (2.*np.pi)**(-n/2.) * np.linalg.det(self.Sig)**(-0.5) * \
             np.exp(-0.5*np.array(scaling_factors)**2.)
 
-        confid_sets = self.get_confidence_sets(scaling_factors)
+        # compute intersection volumes
         V = np.zeros((k,))
         for i in range(k):
             p = confid_sets[i].to_poly().intersect(X)
@@ -124,9 +128,10 @@ class Zonotope:
             if XY is not None:
                V[i] = area(XY[:,0], XY[:,1])
 
-        prob = 1 - erf(scaling_factors[0]/np.sqrt(2.)) ** (2.*n) + \
-               h[1]*V[0] - h[k-1]*V[k-1]
-        for i in range(1,k-1):
+        # compute intersection prob
+        prob = 1 - erf(scaling_factors[0]/np.sqrt(2.)) ** (2.*n)
+        prob += h[0]*V[0]
+        for i in range(k):
             prob += (h[i+1]-h[i]) * V[i]
 
         return min(prob, 1.)
