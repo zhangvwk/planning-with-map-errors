@@ -2,11 +2,10 @@ import numpy as np
 import polytope as pc
 from scipy.special import erf
 
+
 def area(x, y):
-    return 0.5*np.abs( \
-           np.dot(x,np.roll(y,1)) - \
-           np.dot(y,np.roll(x,1)) \
-           )
+    return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
+
 
 class Zonotope:
     def __init__(self, center, generators, cov):
@@ -14,8 +13,8 @@ class Zonotope:
         self.G = generators
         self.Sig = cov
         assert self.G.shape[0] == self.c.shape[0]
-        assert self.G.shape[0] == self.Sig.shape [0]
-        assert self.G.shape[0] == self.Sig.shape [1]
+        assert self.G.shape[0] == self.Sig.shape[0]
+        assert self.G.shape[0] == self.Sig.shape[1]
 
     def get_order(self):
         return self.G.shape[1] / self.G.shape[0]
@@ -39,7 +38,7 @@ class Zonotope:
         """
         n = self.G.shape[0]
         e = self.G.shape[1]
-        assert n == 2 # what follows is only valid in 2D
+        assert n == 2  # what follows is only valid in 2D
         Cp = np.zeros((e, n))
         dp = np.zeros((e,))
         dm = np.zeros((e,))
@@ -63,7 +62,7 @@ class Zonotope:
         A, b = self.to_H()
         return pc.Polytope(A, b)
 
-    def reduce(self, target_order=1.):
+    def reduce(self, target_order=1.0):
         """Reduce the zonotope by replacing 4 well chosen generators by 2 generators
         This is the girard method as described in:
         Reachability of Uncertain Linear Systems Using Zonotopes (2005)
@@ -97,31 +96,34 @@ class Zonotope:
         gs = np.sqrt(vals) * vecs
         # get the zonotope representation of each confidence set
         confid_sets = []
-        scaling_factors = np.atleast_1d(scaling_factors) # to handle scalar case
+        scaling_factors = np.atleast_1d(scaling_factors)  # to handle scalar case
         for i in range(scaling_factors.shape[0]):
             m = scaling_factors[i]
-            z = Zonotope(np.zeros((n,)), m*gs, np.zeros((n,n))) + self
-            z.Sig = np.zeros((n,n))
+            z = Zonotope(np.zeros((n,)), m * gs, np.zeros((n, n))) + self
+            z.Sig = np.zeros((n, n))
             confid_sets.append(z)
         return confid_sets
 
     def get_inter_prob(self, X, scaling_factors):
-        '''
+        """
         Compute intersection probability
         In the notation of Matthias' thesis, the scaling_factors are:
             gamma=m(0), m(1), ..., m(k-1)
-        '''
+        """
         n = self.G.shape[0]
-        assert n == 2 # what follows is only valid in 2D
+        assert n == 2  # what follows is only valid in 2D
         k = scaling_factors.shape[0]
         X = X.to_poly()
 
         confid_sets = self.get_confidence_sets(scaling_factors)
         # append m=0 to the set of scaling factors
-        scaling_factors = np.append(scaling_factors, 0.)
+        scaling_factors = np.append(scaling_factors, 0.0)
 
-        h = (2.*np.pi)**(-n/2.) * np.linalg.det(self.Sig)**(-0.5) * \
-            np.exp(-0.5*np.array(scaling_factors)**2.)
+        h = (
+            (2.0 * np.pi) ** (-n / 2.0)
+            * np.linalg.det(self.Sig) ** (-0.5)
+            * np.exp(-0.5 * np.array(scaling_factors) ** 2.0)
+        )
 
         # compute intersection volumes
         V = np.zeros((k,))
@@ -129,15 +131,15 @@ class Zonotope:
             p = confid_sets[i].to_poly().intersect(X)
             XY = pc.extreme(p)
             if XY is not None:
-               V[i] = area(XY[:,0], XY[:,1])
+                V[i] = area(XY[:, 0], XY[:, 1])
 
         # compute intersection prob
-        prob = 1 - erf(scaling_factors[0]/np.sqrt(2.)) ** (2.*n)
-        prob += h[0]*V[0]
+        prob = 1 - erf(scaling_factors[0] / np.sqrt(2.0)) ** (2.0 * n)
+        prob += h[0] * V[0]
         for i in range(k):
-            prob += (h[i+1]-h[i]) * V[i]
+            prob += (h[i + 1] - h[i]) * V[i]
 
-        return min(prob, 1.)
+        return min(prob, 1.0)
 
     def intersect(self, Z, m):
         """Check the intersection between 2 (probabilistic) zonotopes
@@ -147,4 +149,3 @@ class Zonotope:
         s1 = self.get_confidence_sets(m)[0]
         s2 = Z.get_confidence_sets(m)[0]
         return not pc.is_empty(s1.to_poly().intersect(s2.to_poly()))
-
