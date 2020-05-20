@@ -13,12 +13,12 @@ class Zonotope:
         self.c = center
         self.G = generators
         self.Sig = cov
-        assert self.G.shape[0] == 2
-        assert self.c.shape[0] == 2
-        assert self.Sig.shape == (2, 2)
+        assert self.G.shape[0] == self.c.shape[0]
+        assert self.G.shape[0] == self.Sig.shape [0]
+        assert self.G.shape[0] == self.Sig.shape [1]
 
     def get_order(self):
-        return self.G.shape[1] / 2
+        return self.G.shape[1] / self.G.shape[0]
 
     def __add__(self, other):
         c = self.c + other.c
@@ -39,6 +39,7 @@ class Zonotope:
         """
         n = self.G.shape[0]
         e = self.G.shape[1]
+        assert n == 2 # what follows is only valid in 2D
         Cp = np.zeros((e, n))
         dp = np.zeros((e,))
         dm = np.zeros((e,))
@@ -91,6 +92,7 @@ class Zonotope:
         See Matthias' thesis, p. 96.
         """
         # conpute the generators of the G-zonotope
+        n = self.G.shape[0]
         vals, vecs = np.linalg.eig(self.Sig)
         gs = np.sqrt(vals) * vecs
         # get the zonotope representation of each confidence set
@@ -98,8 +100,8 @@ class Zonotope:
         scaling_factors = np.atleast_1d(scaling_factors) # to handle scalar case
         for i in range(scaling_factors.shape[0]):
             m = scaling_factors[i]
-            z = Zonotope(np.zeros((2,)), m*gs, np.zeros((2,2))) + self
-            z.Sig = np.zeros((2,2))
+            z = Zonotope(np.zeros((n,)), m*gs, np.zeros((n,n))) + self
+            z.Sig = np.zeros((n,n))
             confid_sets.append(z)
         return confid_sets
 
@@ -109,7 +111,8 @@ class Zonotope:
         In the notation of Matthias' thesis, the scaling_factors are:
             gamma=m(0), m(1), ..., m(k-1)
         '''
-        n = 2
+        n = self.G.shape[0]
+        assert n == 2 # what follows is only valid in 2D
         k = scaling_factors.shape[0]
         X = X.to_poly()
 
