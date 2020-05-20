@@ -10,6 +10,73 @@ class Plan:
         self.cost = cost
         self.zonotope_state = zonotope_state
 
+        self.n = 2 # replace this by taking the dimension from the arguments
+        self.kmax = 100 # an argument with a default value?
+        self.k = 0
+
+        # coefficients that do not require the entire history
+        self.a = np.eye(n)
+        self.b = np.zeros(n)
+        self.e = np.eye(n)
+
+        # coefficients that require the entire history
+        self.c = np.zeros((n,n,kmax))
+        self.c[:,:,0] = np.eye(2)
+        self.d = np.zeros((n,n,kmax))
+        self.d[:,:,0] = np.zeros(2)
+        self.p = np.zeros((n,n,kmax))
+        self.q = np.zeros((n,n,kmax))
+
+        # Kalman matrices
+        self.C = None
+        self.L = None
+        self.Pbar = None
+        self.Nu = None
+
+
+    def add_point(self, env, point):
+        '''
+        - get C(k+1), R(k+1)
+        - P = Pbar - L*C*Pbar
+        - Pbar = A*P*A.T + Q
+        - L = Eq (1.9)
+        - update all Nu(n) if needed
+        '''
+        self.k += 1
+
+
+    def update(self, A, B, K):
+        '''
+        - from k to k+1
+        - assume L and C are already update by add_point
+        '''
+        M1 = A - B.dot(K)
+        M2 = np.eye(self.n) - self.L.dot(self.C)
+
+        self.a = M1.dot(self.a)
+        self.b = M1.dot(self.b) - B.dot(K.dot(self.e))
+        self.e = M2.dot(A.dot(self.e))
+
+        self.c[:,:,self.k] = np.eye(2)
+        self.p[:,:,self.k] = -M2
+        self.q[:,:,self.k] = self.L
+
+        # n = 0 ... self.k-1
+        for n in range(self.k):
+            self.c[:,:,n] = M1.dot(self.c[:,:,n]) - B.dot(K.dot(self.p[:,:,n]))
+            self.d[:,:,n] = M1.dot(self.d[:,:,n]) - B.dot(K.dot(self.q[:,:,n]))
+            self.p[:,:,n] = M2.dot(A.dot(self.p[:,:,n]))
+            self.q[:,:,n] = M2.dot(A.dot(self.q[:,:,n]))
+
+
+    def get_prob_unsafe(self, env):
+        '''
+        - called after add_point and update
+        - now we have everything to compute all possible X(k+1)
+          and intersect those with the associated environment
+        '''
+        pass
+
 
 class Searcher:
     def __init__(self, graph, reachability_filter, pruning_coeff):
