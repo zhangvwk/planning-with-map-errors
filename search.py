@@ -2,6 +2,9 @@
 import numpy as np
 import collections
 
+# Custom libraries
+from utils import GeoTools
+
 
 class Plan:
     def __init__(self, head_idx, path, cost, zonotope_state):
@@ -76,6 +79,43 @@ class Plan:
           and intersect those with the associated environment
         '''
         pass
+
+
+class PlanUtils:
+    @staticmethod
+    def get_lines_seen_now(state, env):
+        return env.get_lines_seen(state)
+
+    @staticmethod
+    def update_lines_seen_tot(lines_seen_now, lines_seen_tot):
+        for k, v in lines_seen_now.items():
+            if k in lines_seen_tot:
+                lines_seen_tot[k] = list(set(lines_seen_tot[k] + v))
+            else:
+                lines_seen_tot[k] = v
+
+    @staticmethod
+    def get_observation_matrices(lines_seen_now, env, n):
+        C = np.empty((0, n))
+        v = np.zeros(n)
+        b = []
+        e = []
+        gens = np.empty((0, 2))
+        for rectangle_idx, lines in lines_seen_now.items():
+            rectangle = env.rectangles[rectangle_idx]
+            for line_idx in lines:
+                line = rectangle.edges[line_idx]
+                v[:2] = GeoTools.get_normal_vect(line)
+                C = np.vstack((C, v))
+                mid_point = GeoTools.get_mid_point(line)
+                bound_l, bound_r = rectangle.errors[line_idx]
+                half_wdth = (bound_r - bound_l) / 2
+                b.append(
+                    (mid_point.as_array() + (-bound_l + half_wdth) * v[:2]).dot(v[:2])
+                )
+                e.append(-half_wdth)
+                gens = np.vstack((gens, half_wdth * v[:2]))
+        return C, np.array(b), np.array(e), gens
 
 
 class Searcher:

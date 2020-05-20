@@ -126,7 +126,7 @@ class Polygon:
         plt.fill(self.x_list, self.y_list, alpha=0.75, label=self.id)
         for edge_idx in range(len(self.edges)):
             edge = self.edges[edge_idx]
-            mid_point = edge[0] + (edge[1] - edge[0]) / 2
+            mid_point = GeoTools.get_mid_point(edge)
             plt.annotate(
                 str(edge_idx), [mid_point.x, mid_point.y], fontsize=10, alpha=0.75
             )
@@ -198,6 +198,7 @@ class Rectangle(Polygon):
 
     def set_errors(self, line_i, bound_l, bound_r):
         assert line_i < 4
+        assert bound_l <= bound_r
         self.errors[line_i] = [bound_l, bound_r]
 
     def contains(self, p):

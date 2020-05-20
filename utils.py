@@ -74,6 +74,21 @@ class GeoTools:
             size=x_range.shape[0]
         ) + x_range[:, 0]
 
+    @staticmethod
+    def get_mid_point(edge):
+        return edge[0] + (edge[1] - edge[0]) / 2
+
+    @staticmethod
+    def get_normal_vect(edge):
+        pA, pB = edge
+        horizontal = pA.y == pB.y
+        if horizontal:
+            v = np.array([-(pB.y - pA.y) / (pB.y - pA.x), 1])
+        else:
+            v = np.array([1, -(pB.x - pA.x) / (pB.y - pA.x)])
+        v /= np.linalg.norm(v)
+        return v
+
 
 class TestUtil:
     @staticmethod
