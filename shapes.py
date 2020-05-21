@@ -130,7 +130,7 @@ class Polygon:
             plt.annotate(
                 str(edge_idx), [mid_point.x, mid_point.y], fontsize=10, alpha=0.75
             )
-        plt.annotate(str(self.id), self.get_center_gen()[0], fontsize=12, weight='bold')
+        plt.annotate(str(self.id), self.get_center_gen()[0], fontsize=12, weight="bold")
 
     def get_min_dist(self, p):
         min_dist = float("inf")
@@ -203,10 +203,7 @@ class Rectangle(Polygon):
 
     def contains(self, p):
         """Return True if point p lies within self."""
-        A, B, C = self.vertices[:3]
-        return (0 <= (B - A).dot(p - A) <= (B - A).norm() ** 2) and (
-            0 <= (C - B).dot(p - B) <= (C - B).norm() ** 2
-        )
+        return np.all(self.as_poly.A.dot(p.as_array()) <= self.as_poly.b)
 
     def get_lines_possibly_seen(self, p):
         """Return the list of the subset of self.edges that are
