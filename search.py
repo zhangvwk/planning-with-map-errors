@@ -13,46 +13,64 @@ class Plan:
         self.cost = cost
         self.zonotope_state = zonotope_state
 
-        self.n = 2 # replace this by taking the dimension from the arguments
-        self.kmax = 100 # an argument with a default value?
+        self.n = 2  # replace this by taking the dimension from the arguments
+        self.kmax = 100  # an argument with a default value?
         self.k = 0
 
         # coefficients that do not require the entire history
-        self.a = np.eye(n)
-        self.b = np.zeros(n)
-        self.e = np.eye(n)
+        self.a = np.eye(self.n)
+        self.b = np.zeros(self.n)
+        self.e = np.eye(self.n)
 
         # coefficients that require the entire history
-        self.c = np.zeros((n,n,kmax))
-        self.c[:,:,0] = np.eye(2)
-        self.d = np.zeros((n,n,kmax))
-        self.d[:,:,0] = np.zeros(2)
-        self.p = np.zeros((n,n,kmax))
-        self.q = np.zeros((n,n,kmax))
+        self.c = np.zeros((self.n, self.n, self.kmax))
+        self.c[:, :, 0] = np.eye(2)
+        self.d = np.zeros((self.n, self.n, self.kmax))
+        self.d[:, :, 0] = np.zeros(2)
+        self.p = np.zeros((self.n, self.n, self.kmax))
+        self.q = np.zeros((self.n, self.n, self.kmax))
 
         # Kalman matrices
         self.C = None
-        self.L = None
+        self.P = None
         self.Pbar = None
+        self.L = None
         self.Nu = None
 
+        # Lines
+        self.lines_seen_now = None
+        self.lines_seen_tot = None
 
-    def add_point(self, env, point):
-        '''
+    def add_point(self, env, point, A, B, Q, R, m=0.5):
+        """
         - get C(k+1), R(k+1)
         - P = Pbar - L*C*Pbar
         - Pbar = A*P*A.T + Q
         - L = Eq (1.9)
         - update all Nu(n) if needed
-        '''
+        """
         self.k += 1
+        self.lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
+        PlanUtils.update_lines_seen_tot(self.lines_seen_now, self.lines_seen_tot)
+        self.C, self.b, self.e, self.gens = PlanUtils.get_observation_matrices(
+            self.lines_seen_now, env, self.n
+        )
+        self.Pbar = (A.dot(self.P)).dot(A.T) + Q
+        self.Rhat = PlanUtils.get_Rhat(R, m)
+        self.L = (self.Pbar.dot(self.C.T)).dot(
+            np.linalg.inv((self.C.dot(self.Pbar)).dot(self.C.T)) + self.Rhat
+        )
+        self.P = self.Pbar - (self.L.dot(self.C)).dot(self.Pbar)
+        self.update_Nu()
 
+    def update_Nu(self):
+        raise NotImplementedError
 
     def update(self, A, B, K):
-        '''
+        """
         - from k to k+1
         - assume L and C are already update by add_point
-        '''
+        """
         M1 = A - B.dot(K)
         M2 = np.eye(self.n) - self.L.dot(self.C)
 
@@ -60,31 +78,30 @@ class Plan:
         self.b = M1.dot(self.b) - B.dot(K.dot(self.e))
         self.e = M2.dot(A.dot(self.e))
 
-        self.c[:,:,self.k] = np.eye(2)
-        self.p[:,:,self.k] = -M2
-        self.q[:,:,self.k] = self.L
+        self.c[:, :, self.k] = np.eye(2)
+        self.p[:, :, self.k] = -M2
+        self.q[:, :, self.k] = self.L
 
         # n = 0 ... self.k-1
         for n in range(self.k):
-            self.c[:,:,n] = M1.dot(self.c[:,:,n]) - B.dot(K.dot(self.p[:,:,n]))
-            self.d[:,:,n] = M1.dot(self.d[:,:,n]) - B.dot(K.dot(self.q[:,:,n]))
-            self.p[:,:,n] = M2.dot(A.dot(self.p[:,:,n]))
-            self.q[:,:,n] = M2.dot(A.dot(self.q[:,:,n]))
-
+            self.c[:, :, n] = M1.dot(self.c[:, :, n]) - B.dot(K.dot(self.p[:, :, n]))
+            self.d[:, :, n] = M1.dot(self.d[:, :, n]) - B.dot(K.dot(self.q[:, :, n]))
+            self.p[:, :, n] = M2.dot(A.dot(self.p[:, :, n]))
+            self.q[:, :, n] = M2.dot(A.dot(self.q[:, :, n]))
 
     def get_prob_unsafe(self, env):
-        '''
+        """
         - called after add_point and update
         - now we have everything to compute all possible X(k+1)
           and intersect those with the associated environment
-        '''
+        """
         pass
 
 
 class PlanUtils:
     @staticmethod
-    def get_lines_seen_now(state, env):
-        return env.get_lines_seen(state)
+    def get_lines_seen_now(env, point):
+        return env.get_lines_seen(point)
 
     @staticmethod
     def update_lines_seen_tot(lines_seen_now, lines_seen_tot):
@@ -103,19 +120,27 @@ class PlanUtils:
         gens = np.empty((0, 2))
         for rectangle_idx, lines in lines_seen_now.items():
             rectangle = env.rectangles[rectangle_idx]
+            # print("===== rectangle_idx = {} =====".format(rectangle_idx))
             for line_idx in lines:
+                # print("=== line_idx = {} ===".format(line_idx))
                 line = rectangle.edges[line_idx]
                 v[:2] = GeoTools.get_normal_vect(line)
                 C = np.vstack((C, v))
-                mid_point = GeoTools.get_mid_point(line)
+                mid_point = GeoTools.get_mid_point(line).as_array()
+                center_point = rectangle.get_center_gen()[0]
+                # Make sure v is pointed outward wrt rectangle surface
+                if (mid_point - center_point).dot(v) < 0:
+                    v = -v
                 bound_l, bound_r = rectangle.errors[line_idx]
                 half_wdth = (bound_r - bound_l) / 2
-                b.append(
-                    (mid_point.as_array() + (-bound_l + half_wdth) * v[:2]).dot(v[:2])
-                )
-                e.append(-half_wdth)
+                b.append(-(mid_point + (-bound_l + half_wdth) * v[:2]).dot(v[:2]))
+                e.append(half_wdth)
                 gens = np.vstack((gens, half_wdth * v[:2]))
         return C, np.array(b), np.array(e), gens
+
+    @staticmethod
+    def get_dist(C, b, e, state):
+        return C.dot(state) + b + e
 
 
 class Searcher:
