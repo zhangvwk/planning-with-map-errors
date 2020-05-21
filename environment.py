@@ -71,19 +71,7 @@ class Environment2D:
         return rectangle.id not in self.rectangles
 
     def is_valid_rectangle(self, rectangle, verbose=True):
-        for i, rec in self.rectangles.items():
-            vol = rectangle.as_poly.intersect(rec.as_poly).volume
-            if vol < 1e-5:
-                continue
-            else:
-                if verbose:
-                    print(
-                        "Rectangle collides with existing rectangle of ID {}.".format(
-                            rec.id
-                        )
-                    )
-                return False
-        return True
+        return GeoTools.is_valid_region(rectangle.as_poly, self, verbose)
 
     def add_obstacles(self, num_obs, lgth, wdth, ang=None, max_iter=1e3):
         """Add num_obs obstacles of certain length and width, within

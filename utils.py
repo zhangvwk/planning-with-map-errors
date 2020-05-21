@@ -89,6 +89,22 @@ class GeoTools:
         v /= np.linalg.norm(v)
         return v
 
+    @staticmethod
+    def is_valid_region(region, env, verbose):
+        for i, rec in env.rectangles.items():
+            vol = region.intersect(rec.as_poly).volume
+            if vol < 1e-5:
+                continue
+            else:
+                if verbose:
+                    print(
+                        "Rectangle collides with existing rectangle of ID {}.".format(
+                            rec.id
+                        )
+                    )
+                return False
+        return True
+
 
 class TestUtil:
     @staticmethod
