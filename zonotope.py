@@ -25,6 +25,10 @@ class Zonotope:
         Sig = self.Sig + other.Sig
         return Zonotope(c, G, Sig)
 
+    def __le__(self, other):
+        """Return True if self is enclosed by other."""
+        raise NotImplementedError
+
     def scale(self, T):
         self.c = T.dot(self.c)
         self.G = T.dot(self.G)
