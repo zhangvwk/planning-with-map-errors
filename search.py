@@ -168,17 +168,31 @@ class Searcher:
     def set_goal(self, goal_region):
         self.goal_region = goal_region
 
-    def is_valid_goal(self):
-        raise NotImplementedError
+    def is_valid_goal(self, verbose=True):
+        return GeoTools.is_valid_region(self.goal_region, self.graph.env, verbose)
 
     def reached_goal(self):
-        raise NotImplementedError
+        return len([p for p in self.G if self.in_goal(p[0])]) != 0
+
+    def in_goal(self, point):
+        return self.goal_region.A.dot(point) <= self.goal.b
 
     def remove_dominated(self):
-        raise NotImplementedError
+        for p in self.P_open:
+            for q in self.P:
+                if q.head != p.head:
+                    continue
+                else:
+                    lower_cost = q.cost < p.cost
+                    enclosed = q.zonotope_state <= p.zonotope_state
+                    if lower_cost and enclosed:
+                        self.P_open.remove(p)
+                        self.P.remove(p)
 
     def prune(self, i):
-        raise NotImplementedError
+        for p in self.P_open:
+            if p.cost <= i * self.pruning_coeff:
+                self.G.add(p)
 
     def explore(self):
         if self.x_init is None:
