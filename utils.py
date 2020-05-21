@@ -81,11 +81,11 @@ class GeoTools:
     @staticmethod
     def get_normal_vect(edge):
         pA, pB = edge
-        horizontal = pA.y == pB.y
+        horizontal = abs(pA.y - pB.y) < 1e-05
         if horizontal:
-            v = np.array([-(pB.y - pA.y) / (pB.y - pA.x), 1])
+            v = np.array([-(pB.y - pA.y) / (pB.x - pA.x), 1])
         else:
-            v = np.array([1, -(pB.x - pA.x) / (pB.y - pA.x)])
+            v = np.array([1, -(pB.x - pA.x) / (pB.y - pA.y)])
         v /= np.linalg.norm(v)
         return v
 
