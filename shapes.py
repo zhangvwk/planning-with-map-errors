@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.constants import degree
+import polytope as pc
 
 # Custom libraries
 from utils import GeoTools
@@ -122,15 +123,50 @@ class Polygon:
                 return True
         return False
 
-    def plot(self, show_edges_id=True):
-        plt.fill(self.x_list, self.y_list, alpha=0.75, label=self.id)
-        for edge_idx in range(len(self.edges)):
-            edge = self.edges[edge_idx]
-            mid_point = GeoTools.get_mid_point(edge)
-            plt.annotate(
-                str(edge_idx), [mid_point.x, mid_point.y], fontsize=10, alpha=0.75
+    def plot(self, show_id=True, show_edges_id=True, as_goal=False, mask=False):
+        if not as_goal:
+            if mask:
+                plt.plot(
+                    self.x_list + [self.x_list[0]],
+                    self.y_list + [self.y_list[0]],
+                    color="r",
+                    alpha=0.75
+                )
+            else:
+                plt.fill(
+                    self.x_list,
+                    self.y_list,
+                    alpha=0.5,
+                    edgecolor="r",
+                    linestyle="-",
+                    label=self.id,
+                )
+            if show_edges_id:
+                for edge_idx in range(len(self.edges)):
+                    edge = self.edges[edge_idx]
+                    mid_point = GeoTools.get_mid_point(edge)
+                    plt.annotate(
+                        str(edge_idx),
+                        [mid_point.x, mid_point.y],
+                        fontsize=10,
+                        alpha=0.75,
+                    )
+            annot = str(self.id)
+            color = "k"
+        else:
+            plt.fill(
+                self.x_list,
+                self.y_list,
+                alpha=0.5,
+                facecolor="lightsalmon",
+                linestyle="-",
+                edgecolor="red",
             )
-        plt.annotate(str(self.id), self.get_center_gen()[0], fontsize=12, weight="bold")
+            annot = "G"
+            color = "r"
+        plt.annotate(
+            annot, self.get_center_gen()[0], fontsize=12, weight="bold", color=color
+        )
 
     def get_min_dist(self, p):
         min_dist = float("inf")
@@ -175,8 +211,8 @@ class Rectangle(Polygon):
         self.yaw = angle * degree
         self.vertices = self.compute_vertices()
         super().__init__(self.id, self.vertices)
-        self.error_bounds = [[0, 0] for _ in range(4)]
-        self.actual_errors = [0 for _ in range(4)]
+        self.error_bounds = np.zeros((4, 2))
+        self.actual_errors = np.zeros(4)
         self.as_poly = self.to_poly()  # store it as a Polytope object as well
 
     def compute_vertices(self):
@@ -197,15 +233,26 @@ class Rectangle(Polygon):
             ),
         ]
 
-    def set_error_bounds(self, line_i, bound_l, bound_r):
+    def set_line_error_bounds(self, line_i, bound_l, bound_r):
         assert line_i < 4
         assert bound_l <= bound_r
-        self.error_bounds[line_i] = [bound_l, bound_r]
+        self.error_bounds[line_i] = np.array([bound_l, bound_r])
 
-    def set_actual_error(self, line_i, err):
+    def set_error_bounds(self, bounds_l, bounds_r):
+        assert np.all(bounds_l <= bounds_r)
+        self.error_bounds[:, 0] = bounds_l
+        self.error_bounds[:, 1] = bounds_r
+
+    def set_line_actual_error(self, line_i, err):
         assert line_i < 4
         assert self.error_bounds[line_i][0] <= err <= self.error_bounds[line_i][1]
         self.actual_errors[line_i] = err
+
+    def set_actual_errors(self, err):
+        assert np.all(self.error_bounds[:, 0] <= err) and np.all(
+            self.error_bounds[:, 1] >= err
+        )
+        self.actual_errors = err
 
     def contains(self, p):
         """Return True if point p lies within self."""
@@ -253,3 +300,31 @@ class Rectangle(Polygon):
     def to_poly(self):
         """Convert to a Polytope object."""
         return self.to_zonotope().to_poly()
+
+    def get_error_bounds(self, as_array=True):
+        e_l = np.zeros(4)
+        e_r = np.zeros(4)
+        for i in range(4):
+            e_l[i], e_r[i] = self.error_bounds[i]
+        return e_l, e_r
+
+    def plot(
+        self,
+        show_id=True,
+        show_edges_id=True,
+        show_error_bounds=False,
+        ax=None,
+        as_goal=False,
+    ):
+        if show_error_bounds:
+            A, b = self.as_poly.A, self.as_poly.b
+            e_l, e_r = self.get_error_bounds()
+            e = np.array(self.actual_errors)
+            pc.Polytope(A, b + e_l).plot(ax=ax, alpha=0.2, linewidth=2, color="dimgrey")
+            pc.Polytope(A, b + e_r).plot(ax=ax, alpha=0.2, linewidth=2, color="dimgrey")
+            pc.Polytope(A, b + e).plot(
+                ax=ax, alpha=0.6, color="cornflowerblue", linewidth=2, linestyle="-"
+            )
+        super().plot(
+            show_id=show_id, show_edges_id=show_edges_id, as_goal=as_goal, mask=True
+        )
