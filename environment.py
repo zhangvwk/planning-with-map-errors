@@ -162,11 +162,12 @@ class Environment2D:
                 return True
         return False
 
-    def plot(self, figsize=(10, 10)):
+    def plot(self, show_error_bounds=True):
+        fig, ax = plt.subplots()
         plt.xlim(self.x_range[0])
         plt.ylim(self.x_range[1])
         for rectangle_id, rectangle in self.rectangles.items():
-            rectangle.plot()
+            rectangle.plot(ax=ax, show_error_bounds=show_error_bounds)
         plt.gca().set_aspect("equal", adjustable="box")
 
     def plot_min_proj(self, p):
