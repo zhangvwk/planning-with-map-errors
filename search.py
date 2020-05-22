@@ -115,7 +115,9 @@ class PlanUtils:
     def get_observation_matrices(lines_seen_now, env, n, actual_err=False):
         C = np.empty((0, n))
         v = np.zeros(n)
-        b = []
+        b_half = []
+        b_actual = []
+        b_ref = []
         e = []
         gens = np.empty((0, 2))
         for rectangle_idx, lines in lines_seen_now.items():
@@ -125,26 +127,29 @@ class PlanUtils:
                 # print("=== line_idx = {} ===".format(line_idx))
                 line = rectangle.edges[line_idx]
                 v[:2] = GeoTools.get_normal_vect(line)
-                C = np.vstack((C, v))
                 mid_point = GeoTools.get_mid_point(line).as_array()
                 center_point = rectangle.get_center_gen()[0]
                 # Make sure v is pointed outward wrt rectangle surface
                 if (mid_point - center_point).dot(v) < 0:
                     v = -v
+                C = np.vstack((C, v))
+                bound_l, bound_r = rectangle.error_bounds[line_idx]
+                half_wdth = (bound_r - bound_l) / 2
                 if actual_err:
-                    b.append(
-                        -(mid_point + rectangle.actual_errors[line_idx] * v[:2]).dot(v[:2])
+                    # print("mid_point = {}".format(mid_point))
+                    b_actual.append(
+                        -(mid_point + rectangle.actual_errors[line_idx] * v[:2]).dot(
+                            v[:2]
+                        )
                     )
-                else:
-                    bound_l, bound_r = rectangle.error_bounds[line_idx]
-                    half_wdth = (bound_r - bound_l) / 2
-                    b.append(-(mid_point + (-bound_l + half_wdth) * v[:2]).dot(v[:2]))
-                    e.append(half_wdth)
-                    gens = np.vstack((gens, half_wdth * v[:2]))
+                b_ref.append(-(mid_point.dot(v[:2])))
+                b_half.append(-(mid_point + (-bound_l + half_wdth) * v[:2]).dot(v[:2]))
+                gens = np.vstack((gens, half_wdth * v[:2]))
+                e.append(half_wdth)
         if actual_err:
-            return C, np.array(b), e
+            return C, np.array(b_actual), np.array(b_ref), np.array(e)
         else:
-            return C, np.array(b), np.array(e), gens
+            return C, np.array(b_half), np.array(b_ref), np.array(e), gens
 
     @staticmethod
     def get_dist(C, b, e, state):
@@ -155,7 +160,8 @@ class PlanUtils:
         m = len(e)  # number of measurements
         Rhat = np.zeros((m, m))
         for i in range(m):
-            Rhat[i, i] = ((e[i] / m) + np.sqrt(R)) ** 2
+            Rhat[i, i] = ((e[i] / conf_factor) + np.sqrt(R)) ** 2
+            # Rhat[i, i] = R
         return Rhat
 
 
