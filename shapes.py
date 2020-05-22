@@ -175,7 +175,8 @@ class Rectangle(Polygon):
         self.yaw = angle * degree
         self.vertices = self.compute_vertices()
         super().__init__(self.id, self.vertices)
-        self.errors = [[0, 0] for _ in range(4)]
+        self.error_bounds = [[0, 0] for _ in range(4)]
+        self.actual_errors = [0 for _ in range(4)]
         self.as_poly = self.to_poly()  # store it as a Polytope object as well
 
     def compute_vertices(self):
@@ -196,10 +197,15 @@ class Rectangle(Polygon):
             ),
         ]
 
-    def set_errors(self, line_i, bound_l, bound_r):
+    def set_error_bounds(self, line_i, bound_l, bound_r):
         assert line_i < 4
         assert bound_l <= bound_r
-        self.errors[line_i] = [bound_l, bound_r]
+        self.error_bounds[line_i] = [bound_l, bound_r]
+
+    def set_actual_error(self, line_i, err):
+        assert line_i < 4
+        assert self.error_bounds[line_i][0] <= err <= self.error_bounds[line_i][1]
+        self.actual_errors[line_i] = err
 
     def contains(self, p):
         """Return True if point p lies within self."""

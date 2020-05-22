@@ -41,7 +41,7 @@ class Plan:
         self.lines_seen_now = None
         self.lines_seen_tot = None
 
-    def add_point(self, env, point, A, B, Q, R, m=0.5):
+    def add_point(self, env, point, A, B, Q, R, conf_factor=0.5):
         """
         - get C(k+1), R(k+1)
         - P = Pbar - L*C*Pbar
@@ -56,7 +56,7 @@ class Plan:
             self.lines_seen_now, env, self.n
         )
         self.Pbar = (A.dot(self.P)).dot(A.T) + Q
-        self.Rhat = PlanUtils.get_Rhat(R, m)
+        self.Rhat = PlanUtils.get_Rhat(R, self.e, conf_factor)
         self.L = (self.Pbar.dot(self.C.T)).dot(
             np.linalg.inv((self.C.dot(self.Pbar)).dot(self.C.T)) + self.Rhat
         )
@@ -112,7 +112,7 @@ class PlanUtils:
                 lines_seen_tot[k] = v
 
     @staticmethod
-    def get_observation_matrices(lines_seen_now, env, n):
+    def get_observation_matrices(lines_seen_now, env, n, actual_err=False):
         C = np.empty((0, n))
         v = np.zeros(n)
         b = []
@@ -131,16 +131,32 @@ class PlanUtils:
                 # Make sure v is pointed outward wrt rectangle surface
                 if (mid_point - center_point).dot(v) < 0:
                     v = -v
-                bound_l, bound_r = rectangle.errors[line_idx]
-                half_wdth = (bound_r - bound_l) / 2
-                b.append(-(mid_point + (-bound_l + half_wdth) * v[:2]).dot(v[:2]))
-                e.append(half_wdth)
-                gens = np.vstack((gens, half_wdth * v[:2]))
-        return C, np.array(b), np.array(e), gens
+                if actual_err:
+                    b.append(
+                        -(mid_point + rectangle.error[line_idx] * v[:2]).dot(v[:2])
+                    )
+                else:
+                    bound_l, bound_r = rectangle.error_bounds[line_idx]
+                    half_wdth = (bound_r - bound_l) / 2
+                    b.append(-(mid_point + (-bound_l + half_wdth) * v[:2]).dot(v[:2]))
+                    e.append(half_wdth)
+                    gens = np.vstack((gens, half_wdth * v[:2]))
+        if actual_err:
+            return C, np.array(b), e
+        else:
+            return C, np.array(b), np.array(e), gens
 
     @staticmethod
     def get_dist(C, b, e, state):
         return C.dot(state) + b + e
+
+    @staticmethod
+    def get_Rhat(R, e, conf_factor):
+        m = len(e)  # number of measurements
+        Rhat = np.zeros((m, m))
+        for i in range(m):
+            Rhat[i, i] = ((e[i] / m) + np.sqrt(R)) ** 2
+        return Rhat
 
 
 class Searcher:
