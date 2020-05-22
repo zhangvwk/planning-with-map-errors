@@ -133,7 +133,7 @@ class PlanUtils:
                     v = -v
                 if actual_err:
                     b.append(
-                        -(mid_point + rectangle.error[line_idx] * v[:2]).dot(v[:2])
+                        -(mid_point + rectangle.actual_errors[line_idx] * v[:2]).dot(v[:2])
                     )
                 else:
                     bound_l, bound_r = rectangle.error_bounds[line_idx]
