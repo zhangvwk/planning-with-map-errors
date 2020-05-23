@@ -14,21 +14,42 @@ class Simulator:
 
     def __init__(self, env):
         self.env = env
+        self.A = None
+        self.B = None
+        self.Q = None
+        self.R = None
+        self.K = None
+        self.C = None
+        self.x_est_0 = None
+        self.P_est_0 = None
+        self.motion_ready = False
+        self.obs_ready = False
+        self.gain_ready = False
+        self.est_ready = False
 
     def set_motion(self, A, B, Q):
         self.A = A
         self.B = B
         self.Q = Q
+        self.motion_ready = True
 
     def set_obs(self, R):
         self.R = R
+        self.obs_ready = True
 
     def set_gain(self, K):
         self.K = K
+        self.gain_ready = True
 
     def set_init_est(self, x_est_0, P_est_0):
         self.x_est_0 = x_est_0
         self.P_est_0 = P_est_0
+        self.est_ready = True
+
+    def is_initialized(self):
+        return (
+            self.motion_ready and self.obs_ready and self.gain_ready and self.est_ready
+        )
 
     def simulate_state(self, x, u):
         return (
@@ -37,14 +58,14 @@ class Simulator:
             + np.random.multivariate_normal(np.zeros(self.Q.shape[0]), self.Q)
         )
 
-    def get_obs_matrices(self, x, conf_factor=0.5):
+    def get_obs_matrices(self, x, conf_factor=3):
         lines_seen_now = PlanUtils.get_lines_seen_now(self.env, Point(x[0], x[1]))
         # print("lines_seen_now = {}".format(lines_seen_now))
-        C, b_actual, b_ref, e = PlanUtils.get_observation_matrices(
+        C, b_actual, b_half, e = PlanUtils.get_observation_matrices(
             lines_seen_now, self.env, len(x), actual_err=True
         )
         Rhat = PlanUtils.get_Rhat(self.R, e, conf_factor)
-        return C, b_actual, b_ref, e, Rhat
+        return C, b_actual, b_half, e, Rhat
 
     def simulate_obs(self, x, C, b):
         z = C.dot(x) + b
@@ -57,7 +78,9 @@ class Simulator:
 
     def predict(self, x_est, u, P_est):
         x_bar = self.A.dot(x_est) + self.B.dot(u)
-        P_bar = (self.A.T.dot(P_est)).dot(self.A.T) + self.Q
+        # print("Q = {}".format(self.Q))
+        P_bar = (self.A.dot(P_est)).dot(self.A.T) + self.Q
+        # print("P_bar = {}".format(P_bar))
         return x_bar, P_bar
 
     def get_kalman_gain(self, P_bar, C, Rhat):
@@ -69,10 +92,13 @@ class Simulator:
         return x_est, P_est
 
     def rollout(self, x0, x_noms, u_noms):
+        assert self.is_initialized()
         x = x0
         xs = [x]
         x_est = self.x_est_0
         P_est = self.P_est_0
+        x_ests = [x_est]
+        x_bars = []
         for k in range(len(x_noms)):
             # print("==========================")
             # print("x = {}".format(x))
@@ -96,17 +122,21 @@ class Simulator:
                 x_est, P_est = x_bar, P_bar
             # print("x_est, P_est = {},{}".format(x_est, P_est))
             xs.append(x)
-        return xs
+            x_ests.append(x_est)
+            x_bars.append(x_bar)
+        return xs, x_ests, x_bars
 
     def run(self, iters, x0, S, x_noms, u_noms, verbose=True):
         xs = {}
+        x_ests = {}
+        x_bars = {}
         for i in tqdm(range(iters)):
-            xs[i] = self.rollout(
+            xs[i], x_ests[i], x_bars[i] = self.rollout(
                 x0 + np.random.multivariate_normal(np.zeros(S.shape[0]), S),
                 x_noms,
                 u_noms,
             )
-        return xs
+        return xs, x_ests, x_bars
 
     def plot_traj(self, x, linestyle="-", color="r"):
         x_list, y_list = map(list, zip(*[(state[0], state[1]) for state in x]))
