@@ -1,6 +1,8 @@
 import numpy as np
 import polytope as pc
-from scipy.special import erf
+from scipy.special import erf, erfinv
+
+SCALING_FOR_INCLUSION = np.sqrt(2) * erfinv(0.9 ** 0.5)
 
 
 def area(x, y):
@@ -27,7 +29,9 @@ class Zonotope:
 
     def __le__(self, other):
         """Return True if self is enclosed by other."""
-        raise NotImplementedError
+        p_self = self.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_poly()
+        p_other = other.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_poly()
+        return p_self <= p_other
 
     def scale(self, T):
         self.c = T.dot(self.c)
