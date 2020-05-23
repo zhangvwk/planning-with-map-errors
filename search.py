@@ -134,6 +134,7 @@ class PlanUtils:
                     v = -v
                 C = np.vstack((C, v))
                 bound_l, bound_r = rectangle.error_bounds[line_idx]
+                # print("bound_l, bound_r = {}, {}".format(bound_l, bound_r))
                 half_wdth = (bound_r - bound_l) / 2
                 if actual_err:
                     # print("mid_point = {}".format(mid_point))
@@ -143,7 +144,7 @@ class PlanUtils:
                         )
                     )
                 b_ref.append(-(mid_point.dot(v[:2])))
-                b_half.append(-(mid_point + (-bound_l + half_wdth) * v[:2]).dot(v[:2]))
+                b_half.append(-(mid_point + (-abs(bound_l) + half_wdth) * v[:2]).dot(v[:2]))
                 gens = np.vstack((gens, half_wdth * v[:2]))
                 e.append(half_wdth)
         if actual_err:
