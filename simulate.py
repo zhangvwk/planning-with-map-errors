@@ -46,10 +46,11 @@ class Simulator:
         Rhat = PlanUtils.get_Rhat(self.R, e, conf_factor)
         return C, b_actual, b_ref, e, Rhat
 
-    def simulate_obs(self, x, C, b, Rhat):
-        Rhat = np.array(Rhat)
+    def simulate_obs(self, x, C, b):
         z = C.dot(x) + b
-        return z + np.random.multivariate_normal(np.zeros(Rhat.shape[0]), Rhat)
+        return z + np.random.multivariate_normal(
+            np.zeros(C.shape[0]), self.R * np.eye(C.shape[0])
+        )
 
     def get_controls(self, u_nom, x_est, x_nom):
         return u_nom - self.K.dot(x_est - x_nom)
@@ -62,8 +63,8 @@ class Simulator:
     def get_kalman_gain(self, P_bar, C, Rhat):
         return (P_bar.dot(C.T)).dot(np.linalg.inv((C.dot(P_bar)).dot(C.T) + Rhat))
 
-    def innovate(self, x_bar, L, z, C, b_ref, P_bar):
-        x_est = x_bar + L.dot(z - C.dot(x_bar) - b_ref)
+    def innovate(self, x_bar, L, z, C, b_half, P_bar):
+        x_est = x_bar + L.dot(z - C.dot(x_bar) - b_half)
         P_est = (np.eye(L.shape[0]) - L.dot(C)).dot(P_bar)
         return x_est, P_est
 
@@ -81,16 +82,16 @@ class Simulator:
             # print("x_bar, P_bar = {}, {}".format(x_bar, P_bar))
             x = self.simulate_state(x, u)
             # print("x = {}".format(x))
-            C, b_actual, b_ref, e, Rhat = self.get_obs_matrices(x)
+            C, b_actual, b_half, e, Rhat = self.get_obs_matrices(x)
             # print(
             #     "C, b_actual, b_half, Rhat = {},{},{},{}".format(
             #         C, b_actual, b_half, Rhat
             #     )
             # )
-            z = self.simulate_obs(x, C, b_actual, Rhat)
+            z = self.simulate_obs(x, C, b_actual)
             try:
                 L = self.get_kalman_gain(P_bar, C, Rhat)
-                x_est, P_est = self.innovate(x_bar, L, z, C, b_ref, P_bar)
+                x_est, P_est = self.innovate(x_bar, L, z, C, b_half, P_bar)
             except:
                 x_est, P_est = x_bar, P_bar
             # print("x_est, P_est = {},{}".format(x_est, P_est))

@@ -147,7 +147,7 @@ class PlanUtils:
                 gens = np.vstack((gens, half_wdth * v[:2]))
                 e.append(half_wdth)
         if actual_err:
-            return C, np.array(b_actual), np.array(b_ref), np.array(e)
+            return C, np.array(b_actual), np.array(b_half), np.array(e)
         else:
             return C, np.array(b_half), np.array(b_ref), np.array(e), gens
 
