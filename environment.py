@@ -16,6 +16,9 @@ class Environment2D:
     def __init__(self, x_lims, y_lims):
         self.x_range = np.array([x_lims, y_lims])
         self.initialize_rectangles()
+        self.vol_tot = self.as_rectangle().as_poly.volume
+        self.vol_obs = 0
+        self.vol_free = self.vol_tot
 
     def initialize_rectangles(self):
         self.rectangles = {}
@@ -62,6 +65,9 @@ class Environment2D:
                 max(self.x_range[0][1], max_values[0] + 1),
                 max(self.x_range[1][1], max_values[1] + 1),
             )
+            self.vol_tot = self.as_rectangle().as_poly.volume
+            self.vol_obs += rectangle.as_poly.volume
+            self.vol_free = self.vol_tot - self.vol_obs
         except AssertionError:
             if verbose:
                 print("Please choose another rectangle.")
