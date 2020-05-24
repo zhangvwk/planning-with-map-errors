@@ -4,6 +4,13 @@ import collections
 
 # Custom libraries
 from utils import GeoTools
+from zonotope import Zonotope
+
+
+class NuValues:
+    def __init__(self, n_lines_seen):
+        self.values = np.array((n_lines_seen,), dtype=Zonotope)
+        self.configs = {}
 
 
 class Plan:
@@ -35,6 +42,9 @@ class Plan:
         self.P = None
         self.Pbar = None
         self.L = None
+
+        # for Nu stuff
+        self.Sn = []
         self.Nu = None
 
         # Lines
@@ -114,11 +124,11 @@ class PlanUtils:
 
     @staticmethod
     def rectlines2lines(rectlines):
-        lines = set()
+        lines = []
         for rectangle_idx, line_list in rectlines.items():
             for line_idx in line_list:
                 lines.add(rectangle_idx * 4 + line_idx)
-        return lines
+        return np.array(lines)
 
     @staticmethod
     def get_observation_matrices(lines_seen_now, env, n, actual_err=False):
