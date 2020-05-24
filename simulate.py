@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 # Custom libraries
-from search import PlanUtils
+from plan import PlanUtils
 from shapes import Point
 
 
