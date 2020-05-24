@@ -1,6 +1,7 @@
 # Standard libraries
 import numpy as np
 import collections
+from bitarray import bitarray, frozenbitarray
 
 # Custom libraries
 from utils import GeoTools
@@ -8,9 +9,87 @@ from zonotope import Zonotope
 
 
 class NuValues:
-    def __init__(self, n_lines_seen):
-        self.values = np.array((n_lines_seen,), dtype=Zonotope)
-        self.configs = {}
+    NLINES_TOT = -1 #  to initialize in the driver code
+
+    def __init__(self, Sn):
+        '''
+        Construct an object given a numpy array of line IDs.
+        This object is entitled to that set of line IDs.
+        Ideally I would store that line but can I afford duplicate storage?
+        '''
+        assert Sn.shape[0] < NLINES_TOT
+
+        # should never change, number of lines seen at n
+        self._nlines = Sn.size
+        self._values = {}
+
+        self._bitmask = bitarray([False for i in range(N_LINES_TOT)])
+        # set the bits corresponding to the lines seen to 1
+        for i in range(self._nlines):
+            self._bitmask[Sn[i]] = True
+
+
+    def set_values(Sn, Sk, w, R):
+        '''
+        Set values from the same Sn used for the constructor and Sk.
+        w is the half-width of the uncertain mean.
+        R is the variance for all measurements.
+        '''
+        idx_extr = np.in1d(Sn, Sk) # True for elements in Sn also in Sk
+        n_extr = np.where(idx_extr)[0].size # number of lines that need to be considered as extrema
+
+        n_config = 2**n_extr
+        n_measures = w.size
+        assert n_measures == Sn.size
+
+        bits = bitarray(n_extr)
+        centers = np.zeros((n_measures,))
+        generators = np.zeros((n_measures,))
+        covariances = np.zeros((n_measures,))
+
+        key = bitarray(N_LINES_TOT)
+
+        for i_config in range(n_config):
+            # set a bitmask for the current config in consideration
+            bits.setall(False)
+            bits += bitarray(format(i_config, 'b'))
+
+            centers.fill(0)
+            generators.fill(0)
+            key.setall(False)
+
+            # counter for the config bitmask
+            i = 0
+            for i_measure in range(n_measures):
+                if idx_extr[i_measure]:
+                    # choose + or - the halfwidth
+                    if bits[i]:
+                        centers[i_measure] = e[i_measure]
+                        key[Sn[i_measure]] = True
+                    else:
+                        centers[i_measure] = -e[i_measure]
+                    i += 1
+                else:
+                    # consider the full range
+                    generators[i_measure] = e[i_measure]
+
+            # all extrema must have been considered
+            assert i == n_extr
+            values[frozenbitarray(key)] = Zonotope(centers, generators, R*np.eye(n_measures))
+
+
+    def at_config(Sk, configID):
+        '''
+        Return the zonotope associated with a config ID.
+        configID can be between 0 and 2^|S_k|-1.
+        '''
+        b = bitarray(format(configID, 'b'))
+        bconfig = bitarray([False for i in range(N_LINES_TOT)])
+        for i in range(Sk.shape[0]):
+            if b[i]:
+                bconfig[Sk[i]] = True
+        # filter it by the bitmask of lines seen at n and return
+        return self.values[frozenbitarray(self._bitmask & bconfig)]
 
 
 class Plan:
@@ -44,12 +123,14 @@ class Plan:
         self.L = None
 
         # for Nu stuff
+        # TODO construct from the initial point
         self.Sn = []
-        self.Nu = None
+        self.Nu = []
 
         # Lines
         self.lines_seen_now = None
         self.lines_seen_tot = None
+
 
     def add_point(self, env, point, A, B, Q, R, conf_factor=0.5):
         """
@@ -59,7 +140,6 @@ class Plan:
         - L = Eq (1.9)
         - update all Nu(n) if needed
         """
-        self.k += 1
         lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         PlanUtils.update_lines_seen_tot(lines_seen_now, self.lines_seen_tot)
@@ -72,10 +152,31 @@ class Plan:
             np.linalg.inv((self.C.dot(self.Pbar)).dot(self.C.T)) + self.Rhat
         )
         self.P = self.Pbar - (self.L.dot(self.C)).dot(self.Pbar)
-        self.update_Nu()
 
-    def update_Nu(self):
-        raise NotImplementedError
+        self.update_Nu(env, lines)
+
+
+    def update_Nu(self, env, lines):
+        self.Sn.append(lines)
+        prev_lines = self.Sn[self.k] # self.k not updated yet
+        same = np.intersect1d(lines, prev_lines)
+        additional = np.setdiff1d(lines, same)
+        missing = np.setdiff1d(prev_lines, same)
+
+        # if S(k) = S(k+1), no need to update anything
+        if additional.size>0 or missing.size>0:
+            for n in range(self.k+1):
+                if np.intersect1d(additional, self.Sn[n]).size == 0 or \
+                   np.intersect1d(missing,    self.Sn[n]).size == 0:
+                    Nu_new = NuValues(Sn[n])
+                    Nu_new.set_values(Sn[n], Sn[self.k+1], self.e)
+                    self.Nu[n] = Nu_new
+
+        Nu_new = NuValues(Sn[self.k+1])
+        Nu_new.set_values(Sn[self.k+1], Sn[self.k+1], self.e)
+        self.Nu.append(Nu_new)
+        self.k += 1
+
 
     def update(self, A, B, K):
         """
@@ -99,6 +200,7 @@ class Plan:
             self.d[:, :, n] = M1.dot(self.d[:, :, n]) - B.dot(K.dot(self.q[:, :, n]))
             self.p[:, :, n] = M2.dot(A.dot(self.p[:, :, n]))
             self.q[:, :, n] = M2.dot(A.dot(self.q[:, :, n]))
+
 
     def get_prob_unsafe(self, env):
         """
