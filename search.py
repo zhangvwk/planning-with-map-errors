@@ -2,6 +2,7 @@
 import numpy as np
 import collections
 from bitarray import bitarray, frozenbitarray
+from copy import deepcopy
 
 # Custom libraries
 from utils import GeoTools
@@ -9,7 +10,7 @@ from zonotope import Zonotope
 
 
 class NuValues:
-    NLINES_TOT = -1 #  to initialize in the driver code
+    NLINES_TOT = 16
 
     def __init__(self, Sn):
         '''
@@ -17,19 +18,20 @@ class NuValues:
         This object is entitled to that set of line IDs.
         Ideally I would store that line but can I afford duplicate storage?
         '''
-        assert Sn.shape[0] < NLINES_TOT
+        assert len(Sn) < NuValues.NLINES_TOT
 
         # should never change, number of lines seen at n
-        self._nlines = Sn.size
+        self._nlines = len(Sn)
         self._values = {}
 
-        self._bitmask = bitarray([False for i in range(N_LINES_TOT)])
+        self._bitmask = bitarray(NuValues.NLINES_TOT)
+        self._bitmask.setall(False)
         # set the bits corresponding to the lines seen to 1
         for i in range(self._nlines):
             self._bitmask[Sn[i]] = True
 
 
-    def set_values(Sn, Sk, w, R):
+    def set_values(self, Sn, Sk, w, R):
         '''
         Set values from the same Sn used for the constructor and Sk.
         w is the half-width of the uncertain mean.
@@ -40,19 +42,19 @@ class NuValues:
 
         n_config = 2**n_extr
         n_measures = w.size
-        assert n_measures == Sn.size
+        assert n_measures == len(Sn)
 
         bits = bitarray(n_extr)
+        bitstring_format = '{' + '0:0%db' % n_extr + '}'
         centers = np.zeros((n_measures,))
         generators = np.zeros((n_measures,))
         covariances = np.zeros((n_measures,))
 
-        key = bitarray(N_LINES_TOT)
+        key = bitarray(NuValues.NLINES_TOT)
 
         for i_config in range(n_config):
             # set a bitmask for the current config in consideration
-            bits.setall(False)
-            bits += bitarray(format(i_config, 'b'))
+            bits = bitarray(bitstring_format.format(i_config)[::-1])
 
             centers.fill(0)
             generators.fill(0)
@@ -64,40 +66,47 @@ class NuValues:
                 if idx_extr[i_measure]:
                     # choose + or - the halfwidth
                     if bits[i]:
-                        centers[i_measure] = e[i_measure]
+                        centers[i_measure] = w[i_measure]
                         key[Sn[i_measure]] = True
                     else:
-                        centers[i_measure] = -e[i_measure]
+                        centers[i_measure] = -w[i_measure]
                     i += 1
                 else:
                     # consider the full range
-                    generators[i_measure] = e[i_measure]
+                    generators[i_measure] = w[i_measure]
 
             # all extrema must have been considered
             assert i == n_extr
-            values[frozenbitarray(key)] = Zonotope(centers, generators, R*np.eye(n_measures))
+            self._values[frozenbitarray(key)] = \
+                deepcopy(Zonotope(centers, generators, R*np.eye(n_measures)))
 
 
-    def at_config(Sk, configID):
+    def at_config(self, Sk, configID):
         '''
         Return the zonotope associated with a config ID.
         configID can be between 0 and 2^|S_k|-1.
         '''
-        b = bitarray(format(configID, 'b'))
-        bconfig = bitarray([False for i in range(N_LINES_TOT)])
-        for i in range(Sk.shape[0]):
+        n_extr = len(Sk)
+        assert configID < 2**n_extr
+
+        bitstring_format = '{' + '0:0%db' % n_extr + '}'
+        b = bitarray(bitstring_format.format(configID)[::-1])
+
+        bconfig = bitarray(NuValues.NLINES_TOT)
+        bconfig.setall(False)
+
+        for i in range(n_extr):
             if b[i]:
                 bconfig[Sk[i]] = True
         # filter it by the bitmask of lines seen at n and return
-        return self.values[frozenbitarray(self._bitmask & bconfig)]
+        return self._values[frozenbitarray(self._bitmask & bconfig)]
 
 
 class Plan:
-    def __init__(self, head_idx, path, cost, zonotope_state):
-        self.head_idx = head_idx
-        self.path = path
-        self.cost = cost
-        self.zonotope_state = zonotope_state
+    def __init__(self, start_point, env):
+        self.head = start_point
+        self.path = []
+        self.cost = 0
 
         self.n = 2  # replace this by taking the dimension from the arguments
         self.kmax = 100  # an argument with a default value?
@@ -105,7 +114,7 @@ class Plan:
 
         # coefficients that do not require the entire history
         self.a = np.eye(self.n)
-        self.b = np.zeros(self.n)
+        self.b = np.zeros((self.n, self.n))
         self.e = np.eye(self.n)
 
         # coefficients that require the entire history
@@ -123,9 +132,14 @@ class Plan:
         self.L = None
 
         # for Nu stuff
-        # TODO construct from the initial point
-        self.Sn = []
-        self.Nu = []
+        lines_seen_now = PlanUtils.get_lines_seen_now(env, start_point)
+        line_indices = PlanUtils.rectlines2lines(lines_seen_now)
+        _, _, e, _ = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
+        self.Sn = [line_indices]
+
+        Nu_new = NuValues(self.Sn[0])
+        Nu_new.set_values(self.Sn[0], self.Sn[0], e, 1)
+        self.Nu = [Nu_new]
 
         # Lines
         self.lines_seen_now = None
@@ -229,7 +243,7 @@ class PlanUtils:
         lines = []
         for rectangle_idx, line_list in rectlines.items():
             for line_idx in line_list:
-                lines.add(rectangle_idx * 4 + line_idx)
+                lines.append(rectangle_idx * 4 + line_idx)
         return np.array(lines)
 
     @staticmethod
