@@ -19,6 +19,7 @@ class Environment2D:
         self.vol_tot = self.as_rectangle().as_poly.volume
         self.vol_obs = 0
         self.vol_free = self.vol_tot
+        self.nlines_tot = 0
 
     def initialize_rectangles(self):
         self.rectangles = {}
@@ -68,6 +69,7 @@ class Environment2D:
             self.vol_tot = self.as_rectangle().as_poly.volume
             self.vol_obs += rectangle.as_poly.volume
             self.vol_free = self.vol_tot - self.vol_obs
+            self.nlines_tot += 4
         except AssertionError:
             if verbose:
                 print("Please choose another rectangle.")
