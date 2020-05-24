@@ -84,7 +84,11 @@ class Graph:
         """
         self.init_samples()
 
-    def build(self, n, r, max_neighbors=10, timing=True):
+    def get_heuristic_r(self, n):
+        eps = self.env.vol_free / n
+        return eps * (1 + 3 * eps)
+
+    def build(self, n, r=None, max_neighbors=6, timing=True):
         """Build the graph.
         Args:
             n (int): Number of nodes to sample.
@@ -93,6 +97,8 @@ class Graph:
             max_neighbors (int or None): Maximum number of neighbors to
                 consider per node. If set to None, equivalent to no cap.
         """
+        if r is None:
+            r = self.get_heuristic_r(n)
         self.r = r
         t0 = time.time()
         self.sample_free(n)
