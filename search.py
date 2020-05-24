@@ -266,7 +266,9 @@ class PlanUtils:
                         )
                     )
                 # b_ref.append(-(mid_point.dot(v[:2])))
-                b_half.append(-(mid_point + (-abs(bound_l) + half_wdth) * v[:2]).dot(v[:2]))
+                b_half.append(
+                    -(mid_point + (-abs(bound_l) + half_wdth) * v[:2]).dot(v[:2])
+                )
                 gens = np.vstack((gens, half_wdth * v[:2]))
                 e.append(half_wdth)
                 line_ids.append(rectangle_idx * 4 + line_idx)
@@ -290,9 +292,8 @@ class PlanUtils:
 
 
 class Searcher:
-    def __init__(self, graph, reachability_filter, pruning_coeff):
+    def __init__(self, graph, pruning_coeff=0.5):
         self.graph = graph
-        self.reachability_filter = reachability_filter
         self.pruning_coeff = pruning_coeff
         self.x_init = None
         self.goal_region = None
