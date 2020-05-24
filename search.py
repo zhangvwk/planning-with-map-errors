@@ -12,17 +12,19 @@ from zonotope import Zonotope
 class NuValues:
     NLINES_TOT = 16
 
-    def __init__(self, Sn):
+    def __init__(self, Sn, w, cov):
         '''
         Construct an object given a numpy array of line IDs.
         This object is entitled to that set of line IDs.
         Ideally I would store that line but can I afford duplicate storage?
         '''
-        assert len(Sn) < NuValues.NLINES_TOT
+        assert Sn.size < NuValues.NLINES_TOT
 
         # should never change, number of lines seen at n
-        self._nlines = len(Sn)
+        self._nlines = Sn.size
         self._values = {}
+        self._w = w
+        self._cov = cov
 
         self._bitmask = bitarray(NuValues.NLINES_TOT)
         self._bitmask.setall(False)
@@ -31,25 +33,31 @@ class NuValues:
             self._bitmask[Sn[i]] = True
 
 
-    def set_values(self, Sn, Sk, w, R):
+    def set_values(self, Sn, Sk):
         '''
         Set values from the same Sn used for the constructor and Sk.
         w is the half-width of the uncertain mean.
         R is the variance for all measurements.
         '''
-        idx_extr = np.in1d(Sn, Sk) # True for elements in Sn also in Sk
-        n_extr = np.where(idx_extr)[0].size # number of lines that need to be considered as extrema
+        assert Sn.size == self._nlines # incomplete check but still useful
+        self._values = {} # reinitialize
+
+        idx_extr = np.in1d(Sn, Sk) # True for elements in Sn also in Sk, size of Sn
+        # number of lines that need to be considered as extrema, those are both in Sn and Sk
+        n_extr = np.where(idx_extr)[0].size
 
         n_config = 2**n_extr
-        n_measures = w.size
-        assert n_measures == len(Sn)
 
+        # bits is used to keep track which extremum has been considered
+        # for each line considered as extrema
         bits = bitarray(n_extr)
         bitstring_format = '{' + '0:0%db' % n_extr + '}'
-        centers = np.zeros((n_measures,))
-        generators = np.zeros((n_measures,))
-        covariances = np.zeros((n_measures,))
 
+        centers = np.zeros((Sn.size,))
+        generators = np.zeros((Sn.size,))
+        covariances = np.zeros((Sn.size,))
+
+        # final key of size the total number of lines in the environment
         key = bitarray(NuValues.NLINES_TOT)
 
         for i_config in range(n_config):
@@ -60,25 +68,26 @@ class NuValues:
             generators.fill(0)
             key.setall(False)
 
-            # counter for the config bitmask
             i = 0
-            for i_measure in range(n_measures):
-                if idx_extr[i_measure]:
-                    # choose + or - the halfwidth
+            for iSn in range(Sn.size):
+                if idx_extr[iSn]:
+                    # a line in Sn that is also in Sk
                     if bits[i]:
-                        centers[i_measure] = w[i_measure]
-                        key[Sn[i_measure]] = True
+                        # choose + half width
+                        centers[iSn] = self._w[iSn]
+                        key[Sn[iSn]] = True # Sn[iSn] = this line ID
                     else:
-                        centers[i_measure] = -w[i_measure]
+                        # choose - half width
+                        centers[iSn] = -self._w[iSn]
                     i += 1
                 else:
-                    # consider the full range
-                    generators[i_measure] = w[i_measure]
+                    # a line in Sn that is not in Sk, consider the full range
+                    generators[iSn] = self._w[iSn]
 
             # all extrema must have been considered
             assert i == n_extr
             self._values[frozenbitarray(key)] = \
-                deepcopy(Zonotope(centers, generators, R*np.eye(n_measures)))
+                deepcopy(Zonotope(centers, generators, self._cov*np.eye(Sn.size)))
 
 
     def at_config(self, Sk, configID):
@@ -137,8 +146,8 @@ class Plan:
         _, _, e, _ = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
         self.Sn = [line_indices]
 
-        Nu_new = NuValues(self.Sn[0])
-        Nu_new.set_values(self.Sn[0], self.Sn[0], e, 1)
+        Nu_new = NuValues(self.Sn[0], e, 1)
+        Nu_new.set_values(self.Sn[0], self.Sn[0])
         self.Nu = [Nu_new]
 
         # Lines
@@ -170,7 +179,7 @@ class Plan:
         self.update_Nu(env, lines)
 
 
-    def update_Nu(self, env, lines):
+    def update_Nu(self, env, lines, w):
         self.Sn.append(lines)
         prev_lines = self.Sn[self.k] # self.k not updated yet
         same = np.intersect1d(lines, prev_lines)
@@ -182,12 +191,11 @@ class Plan:
             for n in range(self.k+1):
                 if np.intersect1d(additional, self.Sn[n]).size == 0 or \
                    np.intersect1d(missing,    self.Sn[n]).size == 0:
-                    Nu_new = NuValues(Sn[n])
-                    Nu_new.set_values(Sn[n], Sn[self.k+1], self.e)
-                    self.Nu[n] = Nu_new
 
-        Nu_new = NuValues(Sn[self.k+1])
-        Nu_new.set_values(Sn[self.k+1], Sn[self.k+1], self.e)
+                    self.Nu[n].set_values(self.Sn[n], self.Sn[self.k+1])
+
+        Nu_new = NuValues(self.Sn[self.k+1], w, 1)
+        Nu_new.set_values(self.Sn[self.k+1], self.Sn[self.k+1])
         self.Nu.append(Nu_new)
         self.k += 1
 
