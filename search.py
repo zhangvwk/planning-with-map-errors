@@ -50,10 +50,11 @@ class Plan:
         - update all Nu(n) if needed
         """
         self.k += 1
-        self.lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
-        PlanUtils.update_lines_seen_tot(self.lines_seen_now, self.lines_seen_tot)
+        lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
+        line_indices = PlanUtils.rectlines2lines(lines_seen_now)
+        PlanUtils.update_lines_seen_tot(lines_seen_now, self.lines_seen_tot)
         self.C, self.b, self.e, line_ids = PlanUtils.get_observation_matrices(
-            self.lines_seen_now, env, self.n
+            lines_seen_now, env, self.n
         )
         self.Pbar = (A.dot(self.P)).dot(A.T) + Q
         self.Rhat = PlanUtils.get_Rhat(R, self.e, conf_factor)
@@ -112,6 +113,14 @@ class PlanUtils:
                 lines_seen_tot[k] = v
 
     @staticmethod
+    def rectlines2lines(rectlines):
+        lines = set()
+        for rectangle_idx, line_list in rectlines.items():
+            for line_idx in line_list:
+                lines.add(rectangle_idx * 4 + line_idx)
+        return lines
+
+    @staticmethod
     def get_observation_matrices(lines_seen_now, env, n, actual_err=False):
         C = np.empty((0, n))
         v = np.zeros(n)
@@ -148,7 +157,7 @@ class PlanUtils:
                 b_half.append(-(mid_point + (-abs(bound_l) + half_wdth) * v[:2]).dot(v[:2]))
                 gens = np.vstack((gens, half_wdth * v[:2]))
                 e.append(half_wdth)
-                line_ids.append((rectangle_idx, line_idx))
+                line_ids.append(rectangle_idx * 4 + line_idx)
         if actual_err:
             return C, np.array(b_actual), np.array(b_half), np.array(e)
         else:
