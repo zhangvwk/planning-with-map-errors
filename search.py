@@ -52,7 +52,7 @@ class Plan:
         self.k += 1
         self.lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
         PlanUtils.update_lines_seen_tot(self.lines_seen_now, self.lines_seen_tot)
-        self.C, self.b, self.e, self.gens = PlanUtils.get_observation_matrices(
+        self.C, self.b, self.e, line_ids = PlanUtils.get_observation_matrices(
             self.lines_seen_now, env, self.n
         )
         self.Pbar = (A.dot(self.P)).dot(A.T) + Q
@@ -117,8 +117,9 @@ class PlanUtils:
         v = np.zeros(n)
         b_half = []
         b_actual = []
-        b_ref = []
+        # b_ref = []
         e = []
+        line_ids = []
         gens = np.empty((0, 2))
         for rectangle_idx, lines in lines_seen_now.items():
             rectangle = env.rectangles[rectangle_idx]
@@ -143,14 +144,15 @@ class PlanUtils:
                             v[:2]
                         )
                     )
-                b_ref.append(-(mid_point.dot(v[:2])))
+                # b_ref.append(-(mid_point.dot(v[:2])))
                 b_half.append(-(mid_point + (-abs(bound_l) + half_wdth) * v[:2]).dot(v[:2]))
                 gens = np.vstack((gens, half_wdth * v[:2]))
                 e.append(half_wdth)
+                line_ids.append((rectangle_idx, line_idx))
         if actual_err:
             return C, np.array(b_actual), np.array(b_half), np.array(e)
         else:
-            return C, np.array(b_half), np.array(b_ref), np.array(e), gens
+            return C, np.array(b_half), np.array(e), np.array(line_ids)
 
     @staticmethod
     def get_dist(C, b, e, state):
