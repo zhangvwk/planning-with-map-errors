@@ -130,7 +130,7 @@ class Polygon:
                     self.x_list + [self.x_list[0]],
                     self.y_list + [self.y_list[0]],
                     color="r",
-                    alpha=0.75
+                    alpha=0.75,
                 )
             else:
                 plt.fill(
@@ -212,6 +212,8 @@ class Rectangle(Polygon):
         self.vertices = self.compute_vertices()
         super().__init__(self.id, self.vertices)
         self.error_bounds = np.zeros((4, 2))
+        self.half_widths = np.zeros(4)
+        self.center_offsets = np.zeros(4)
         self.actual_errors = np.zeros(4)
         self.as_poly = self.to_poly()  # store it as a Polytope object as well
 
@@ -237,6 +239,8 @@ class Rectangle(Polygon):
         assert line_i < 4
         assert bound_l <= bound_r
         self.error_bounds[line_i] = np.array([bound_l, bound_r])
+        self.half_widths[line_i] = (bound_r - bound_l) / 2
+        self.center_offsets[line_i] = -abs(bound_l) + self.half_widths[line_i]
 
     def set_error_bounds(self, bounds_l, bounds_r):
         assert np.all(bounds_l <= bounds_r)
@@ -284,22 +288,52 @@ class Rectangle(Polygon):
                 else:
                     return [edge_idx_prev, edge_idx]
 
-    def get_center_gen(self):
-        pA, pB, pC, _ = self.vertices
+    def get_center_gen(self, vertices_config=None):
+        if vertices_config is None:
+            pA, pB, pC, _ = self.vertices
+        else:
+            pA, pB, pC, _ = vertices_config
         gen_1 = (pB - pA) / 2
         gen_2 = (pC - pB) / 2
         center = (pA + gen_1 + gen_2).as_array()
         generators = np.concatenate(([gen_1.as_array()], [gen_2.as_array()])).T
         return center, generators
 
-    def to_zonotope(self):
-        """Convert to a Zonotope object."""
-        center, generators = self.get_center_gen()
+    def to_zonotope(self, config=None):
+        """Convert to a Zonotope object.
+        config:
+            None corresponds to the non-centered rectangle.
+            "full" corresponds to the centered rectangle.
+            "actual" corresponds to the actual rectangle.
+            [b1,b2,b3,b4] where the b's are binary values corresponds to the rectangle
+                with the left (0) or right (1) extremes.
+        """
+        vertices_config = self.vertices[:]
+        if config is not None:
+            for edge_idx in range(len(self.edges)):
+                edge = self.edges[edge_idx]
+                p1, p2 = edge
+                v = GeoTools.get_normal_vect(edge)
+                v = Point(v[0], v[1])
+                p3, p4 = self.edges[(edge_idx + 1) % 4]
+                # Make sure v is pointed outward wrt rectangle surface
+                if (p2 - p4).dot(v) < 0:
+                    v = -v
+                if config == "full":
+                    w = self.center_offsets[edge_idx]
+                elif config == "actual":
+                    w = self.actual_errors[edge_idx]
+                else:
+                    w = self.error_bounds[edge_idx][config[edge_idx]]
+                vertices_config[edge_idx] += w * v
+                vertices_config[(edge_idx + 1) % 4] += w * v
+
+        center, generators = self.get_center_gen(vertices_config)
         return Zonotope(center, generators, np.zeros((2, 2)))
 
-    def to_poly(self):
+    def to_poly(self, config=None):
         """Convert to a Polytope object."""
-        return self.to_zonotope().to_poly()
+        return self.to_zonotope(config).to_poly()
 
     def get_error_bounds(self, as_array=True):
         e_l = np.zeros(4)
