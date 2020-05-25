@@ -67,6 +67,22 @@ class PlanUtils:
             Rhat[i, i] = ((e[i] / conf_factor) + np.sqrt(R)) ** 2
         return Rhat
 
+    @staticmethod
+    def init_bitarray(nlines_tot):
+        return bitarray(nlines_tot)
+
+    @staticmethod
+    def configID2bitarray(configID, Sn, nlines_tot):
+        n_extr = len(Sn)
+        bitstring_format = "{" + "0:0%db" % n_extr + "}"
+        b = bitarray(bitstring_format.format(configID)[::-1])
+        bconfig = PlanUtils.init_bitarray(nlines_tot)
+        bconfig.setall(False)
+        for i in range(n_extr):
+            if b[i]:
+                bconfig[Sn[i]] = True
+        return bconfig
+
 
 class NuValues:
     def __init__(self, Sn, w, cov, nlines_tot):
@@ -84,16 +100,13 @@ class NuValues:
         self._cov = cov
         self._nlines_tot = nlines_tot
 
-        self._bitmask = self.init_bitarray()
+        self._bitmask = PlanUtils.init_bitarray(nlines_tot)
         self._bitmask.setall(False)
         # set the bits corresponding to the lines seen to 1
         for i in range(self._nlines):
             self._bitmask[Sn[i]] = True
 
         self.set_values(Sn, Sn)
-
-    def init_bitarray(self):
-        return bitarray(self._nlines_tot)
 
     def set_values(self, Sn, Sk):
         """
@@ -119,7 +132,7 @@ class NuValues:
         generators = np.zeros((Sn.size,))
 
         # final key of size the total number of lines in the environment
-        key = self.init_bitarray()
+        key = PlanUtils.init_bitarray(self._nlines_tot)
 
         for i_config in range(n_config):
             # set a bitmask for the current config in consideration
@@ -160,14 +173,7 @@ class NuValues:
         n_extr = len(Sk)
         assert configID < 2 ** n_extr
 
-        bitstring_format = "{" + "0:0%db" % n_extr + "}"
-        b = bitarray(bitstring_format.format(configID)[::-1])
-        bconfig = self.init_bitarray()
-        bconfig.setall(False)
-
-        for i in range(n_extr):
-            if b[i]:
-                bconfig[Sk[i]] = True
+        bconfig = PlanUtils.configID2bitarray(configID, Sk, self._nlines_tot)
         # filter it by the bitmask of lines seen at n and return
         return self._values[frozenbitarray(self._bitmask & bconfig)]
 
@@ -325,23 +331,25 @@ class Plan:
           and intersect those with the associated environment
         """
         n_extr = len(self.Sn[-1])
-        Xks = self.get_Xks()
+        Xks, configID2recconfig = self.get_Xks()
         p = 0.0
         for configID in range(2 ** n_extr):
             for rectangle_idx in self.rectangles_seen_now:
                 p = max(
                     p,
                     self.get_prob_collision(
-                        Xks[configID], env.rectangles[rectangle_idx]
+                        Xks[configID],
+                        env.rectangles[rectangle_idx],
+                        configID2recconfig[configID][rectangle_idx],
                     ),
                 )
         return p
 
-    def get_prob_collision(self, Xk, rectangle):
+    def get_prob_collision(self, Xk, rectangle, config):
         """Return the probability of collision between the reachable set
         Xk and a Rectangle object.
         """
-        return Xk.get_inter_prob(rectangle.to_zonotope())
+        return Xk.get_inter_prob(rectangle.to_zonotope(config))
 
     def get_Xks(self):
         """Return a dictionary of format:
@@ -350,20 +358,29 @@ class Plan:
         amb = self.a - self.b
         center_offset = self.head + amb.dot(self.path[0])
         cov_offset = amb.dot(self.P0.dot(amb.T))
-        for n in range(1, self.k+1):
-            cov_offset += self.c[:,:,n].dot(self.Q.dot(self.c[:,:,n].T))
+        for n in range(1, self.k + 1):
+            cov_offset += self.c[:, :, n].dot(self.Q.dot(self.c[:, :, n].T))
 
         n_extr = len(self.Sn[-1])
         Xks = {}
-
+        configID2recconfig = {}
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
-            Xks[configID] = self.Nu[1].at_config(self.Sn[-1], configID).scale(
-                    self.d[:, :, 1]
-                )
-            for n in range(2, self.k+1):
-                Xks[configID] += self.Nu[n].at_config(self.Sn[-1], configID).scale(
-                    self.d[:, :, n]
+            Xks[configID] = (
+                self.Nu[1].at_config(self.Sn[-1], configID).scale(self.d[:, :, 1])
+            )
+            for n in range(2, self.k + 1):
+                Xks[configID] += (
+                    self.Nu[n].at_config(self.Sn[-1], configID).scale(self.d[:, :, n])
                 )
             Xks[configID].c += center_offset
             Xks[configID].Sig += cov_offset
+
+            bconfig = self.configID2bitarray(configID, self.Sn[-1], self._nlines_tot)
+            recconfig = {}
+            for rectangle_idx in range(0, int(len(bconfig) / 4)):
+                config = bconfig[rectangle_idx * 4 : (rectangle_idx + 1) * 4]
+                if any(config):
+                    recconfig[rectangle_idx] = config
+            configID2recconfig[configID] = recconfig
+        return Xks, configID2recconfig
