@@ -68,6 +68,18 @@ class GeoTools:
         return shapes.Point(array[0], array[1])
 
     @staticmethod
+    def vertices2edges(vertices):
+        edges = []
+        V = len(vertices)
+        for i in range(V):
+            edges.append((vertices[i], vertices[(i + 1) % V]))
+        return edges
+
+    @staticmethod
+    def vertices2array(vertices):
+        return np.array([v.as_array() for v in vertices])
+
+    @staticmethod
     def sample_in_range(x_range):
         """Sample a node uniformly in the state space."""
         return (x_range[:, 1] - x_range[:, 0]) * np.random.uniform(
@@ -90,9 +102,9 @@ class GeoTools:
         return v
 
     @staticmethod
-    def is_valid_region(region, env, verbose):
+    def is_valid_region(region, env, verbose, config="worst"):
         for i, rec in env.rectangles.items():
-            vol = region.intersect(rec.as_poly).volume
+            vol = region.intersect(rec.to_poly(config)).volume
             if vol < 1e-5:
                 continue
             else:
