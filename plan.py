@@ -39,8 +39,7 @@ class PlanUtils:
                 if (mid_point - center_point).dot(v) < 0:
                     v = -v
                 C = np.vstack((C, v))
-                bound_l, bound_r = rectangle.error_bounds[line_idx]
-                half_wdth = (bound_r - bound_l) / 2
+                half_wdth = rectangle.half_widths[line_idx]
                 if actual_err:
                     b_actual.append(
                         -(mid_point + rectangle.actual_errors[line_idx] * v[:2]).dot(
@@ -48,7 +47,7 @@ class PlanUtils:
                         )
                     )
                 b_half.append(
-                    -(mid_point + (-abs(bound_l) + half_wdth) * v[:2]).dot(v[:2])
+                    -(mid_point + rectangle.center_offsets[line_idx] * v[:2]).dot(v[:2])
                 )
                 w.append(half_wdth)
         if actual_err:
