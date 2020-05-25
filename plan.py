@@ -5,13 +5,17 @@ from copy import deepcopy
 
 # Custom libraries
 from utils import GeoTools
+from shapes import Point
 from zonotope import Zonotope
 
 
 class PlanUtils:
     @staticmethod
-    def get_lines_seen_now(env, point):
-        return env.get_lines_seen(point)
+    def get_lines_seen_now(env, point, config="full"):
+        if not isinstance(point, np.ndarray):
+            return env.get_lines_seen(point, config=config)
+        else:
+            return env.get_lines_seen(Point(point[0], point[1]), config=config)
 
     @staticmethod
     def rectlines2lines(rectlines):
@@ -31,7 +35,7 @@ class PlanUtils:
         for rectangle_idx, lines in lines_seen_now.items():
             rectangle = env.rectangles[rectangle_idx]
             for line_idx in lines:
-                line = rectangle.edges[line_idx]
+                line = rectangle.edges["full"][line_idx]
                 v[:2] = GeoTools.get_normal_vect(line)
                 mid_point = GeoTools.get_mid_point(line).as_array()
                 center_point = rectangle.get_center_gen()[0]
@@ -334,22 +338,24 @@ class Plan:
         Xks, configID2recconfig = self.get_Xks()
         p = 0.0
         for configID in range(2 ** n_extr):
+            bconfig = self.configID2bitarray(configID, self.Sn[-1], self._nlines_tot)
             for rectangle_idx in self.rectangles_seen_now:
+                config = bconfig[rectangle_idx * 4 : (rectangle_idx + 1) * 4]
                 p = max(
                     p,
                     self.get_prob_collision(
                         Xks[configID],
-                        env.rectangles[rectangle_idx],
+                        env.rectangles[rectangle_idx].to_zonotope(config),
                         configID2recconfig[configID][rectangle_idx],
                     ),
                 )
         return p
 
-    def get_prob_collision(self, Xk, rectangle, config):
+    def get_prob_collision(self, Xk, rectangle_zono):
         """Return the probability of collision between the reachable set
         Xk and a Rectangle object.
         """
-        return Xk.get_inter_prob(rectangle.to_zonotope(config))
+        return Xk.get_inter_prob(rectangle_zono)
 
     def get_Xks(self):
         """Return a dictionary of format:

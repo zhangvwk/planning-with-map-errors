@@ -88,7 +88,7 @@ class Graph:
         eps = self.env.vol_free / n
         return eps * (1 + 3 * eps)
 
-    def build(self, n, r=None, max_neighbors=6, timing=True):
+    def build(self, n, r=None, max_neighbors=6, config="worst", timing=True):
         """Build the graph.
         Args:
             n (int): Number of nodes to sample.
@@ -101,25 +101,25 @@ class Graph:
             r = self.get_heuristic_r(n)
         self.r = r
         t0 = time.time()
-        self.sample_free(n)
+        self.sample_free(n, config)
         t1 = time.time()
         if timing:
             print("Sampling took: {:0.2f} s.".format(t1 - t0))
         if max_neighbors is None:
             max_neighbors = len(self.samples)
         for src_idx in range(len(self.samples)):
-            self.connect(src_idx, r, max_neighbors)
+            self.connect(src_idx, r, max_neighbors, config)
         t2 = time.time()
         if timing:
             print("Connecting took: {:0.2f} s.".format(t2 - t1))
 
-    def sample_free(self, n):
+    def sample_free(self, n, config):
         """Sample n nodes in the free space."""
         num_added = 0
         new_samples = []
         while num_added < n:
             sample = GeoTools.sample_in_range(self.x_range)
-            if not self.env.contains(GeoTools.array2point(sample)):
+            if not self.env.contains(GeoTools.array2point(sample), config):
                 new_samples.append(sample)
                 num_added += 1
         self.add_sample(new_samples)
@@ -129,7 +129,7 @@ class Graph:
         """Add a sample to the current set of samples."""
         self.samples = np.vstack((self.samples, new_samples))
 
-    def connect(self, src_idx, r, max_neighbors):
+    def connect(self, src_idx, r, max_neighbors, config):
         """Connect src_idx'th node to any other node in the graph,
         in the limit of a total of max_neighbors, for which the optimal
         cost is less than r and for which the optimal trajectory lies in the free space.
@@ -147,19 +147,19 @@ class Graph:
             cost, traj = self.compute_path(
                 self.samples[src_idx], self.samples[dest_idx]
             )
-            if cost <= r and not self.intersects(traj):
+            if cost <= r and not self.intersects(traj, config):
                 self.edges[src_idx][dest_idx] = (cost, traj)
 
     def compute_path(self, u, v):
         """Wrapper around the planner attribute."""
         return self.planner.compute_path(u, v)
 
-    def intersects(self, traj):
+    def intersects(self, traj, config):
         """Return false if a trajectory lies in the free space."""
         for point_idx in range(len(traj) - 1):
             p = GeoTools.array2point(traj[point_idx])
             p_ = GeoTools.array2point(traj[point_idx + 1])
-            if self.env.is_intersected([p, p_]):
+            if self.env.is_intersected([p, p_], config):
                 return True
         return False
 
@@ -170,11 +170,11 @@ class Graph:
                 self.env.get_lines_seen(GeoTools.array2point(self.samples[sample_idx]))
             )
 
-    def plot(self, plot_edges=True):
+    def plot(self, ax=None, plot_edges=True):
         """Plot the the nodes and edges of the graph.
         Note: this can take a long time if plot_edges is set to True.
         """
-        self.env.plot()
+        self.env.plot(ax=ax)
         plt.scatter(self.x_init[0], self.x_init[1], color="r", label="x_init")
         plt.scatter(self.samples[1:, 0], self.samples[1:, 1])
         if plot_edges:

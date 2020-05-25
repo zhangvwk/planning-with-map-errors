@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.constants import degree
 import polytope as pc
+from bitarray import bitarray, frozenbitarray
 
 # Custom libraries
 from utils import GeoTools
@@ -73,7 +74,7 @@ class Polygon:
         try:
             self.id = id_
             self.vertices = vertices
-            self.store_edges()
+            self.edges = GeoTools.vertices2edges(vertices)
             assert self.is_valid()
             self.x_list, self.y_list = map(
                 list, zip(*[(v.x, v.y) for v in self.vertices])
@@ -87,13 +88,7 @@ class Polygon:
         if not as_array:
             return self.vertices
         else:
-            return np.array([v.as_array() for v in self.vertices])
-
-    def store_edges(self):
-        self.edges = []
-        V = len(self.vertices)
-        for i in range(V):
-            self.edges.append((self.vertices[i], self.vertices[(i + 1) % V]))
+            return GeoTools.vertices2array(self.vertices)
 
     def is_valid(self):
         for i in range(len(self.edges) - 2):
@@ -104,22 +99,30 @@ class Polygon:
                     return False
         return True
 
-    def is_intersected(self, line):
-        for edge in self.edges:
+    def is_intersected(self, line, config):
+        if config is not None:
+            edges = self.edges[config]
+        else:
+            edges = self.edges
+        for edge in edges:
             if GeoTools.doIntersect(edge[0], edge[1], line[0], line[1]):
                 return True
         return False
 
-    def intersects_triangle(self, p1, p2, p3):
+    def intersects_triangle(self, p1, p2, p3, config=None):
         """Return true if self intersects with triangle formed by (p1, p2, p3).
         First check if a vertex of self is within the triangle.
         Second check if an edge of self intersects with the triangle.
         """
-        for p in self.vertices:
+        if config is not None:
+            vertices = self.vertices[config]
+        else:
+            vertices = self.vertices
+        for p in vertices:
             if p.is_in_triangle(p1, p2, p3):
                 return True
         for triangle_edge in [[p1, p2], [p1, p3], [p2, p3]]:
-            if self.is_intersected(triangle_edge):
+            if self.is_intersected(triangle_edge, config):
                 return True
         return False
 
@@ -142,8 +145,12 @@ class Polygon:
                     label=self.id,
                 )
             if show_edges_id:
-                for edge_idx in range(len(self.edges)):
-                    edge = self.edges[edge_idx]
+                if isinstance(self.edges, dict):
+                    edges = self.edges["original"]
+                else:
+                    edges = self.edges
+                for edge_idx in range(len(edges)):
+                    edge = edges[edge_idx]
                     mid_point = GeoTools.get_mid_point(edge)
                     plt.annotate(
                         str(edge_idx),
@@ -194,6 +201,10 @@ class Polygon:
         p.plot_edge(min_proj)
 
 
+CONFIG2BIT = {"worst": bitarray("1111"), "best": bitarray("0000")}
+BIT2CONFIG = {frozenbitarray("1111"): "worst", frozenbitarray("0000"): "best"}
+
+
 class Rectangle(Polygon):
     """Rectangle class (subclass of Polygon).
     Instantiated with a the 2D coordinates of a point, an angle
@@ -209,13 +220,46 @@ class Rectangle(Polygon):
         self.lgth = lgth
         self.wdth = wdth
         self.yaw = angle * degree
-        self.vertices = self.compute_vertices()
-        super().__init__(self.id, self.vertices)
+        self.vertices_original = self.compute_vertices()
+        super().__init__(self.id, self.vertices_original)
+        self.edges_original = self.edges
         self.error_bounds = np.zeros((4, 2))
         self.half_widths = np.zeros(4)
         self.center_offsets = np.zeros(4)
         self.actual_errors = np.zeros(4)
-        self.as_poly = self.to_poly()  # store it as a Polytope object as well
+        self.update_stored_configs()
+
+    def update_stored_configs(self):
+        self.vertices = {
+            "original": self.vertices_original,
+            "full": self.get_vertices("full"),
+            "worst": self.get_vertices("worst"),
+            "best": self.get_vertices("best"),
+            "actual": self.get_vertices("actual"),
+        }
+        self.edges = {
+            "original": self.edges_original,
+            "full": GeoTools.vertices2edges(self.vertices["full"]),
+            "worst": GeoTools.vertices2edges(self.vertices["worst"]),
+            "best": GeoTools.vertices2edges(self.vertices["best"]),
+            "actual": GeoTools.vertices2edges(self.vertices["actual"]),
+        }
+        self.as_zono = {}
+        self.as_zono = {
+            "original": self.to_zonotope(),
+            "full": self.to_zonotope("full"),
+            "worst": self.to_zonotope("worst"),
+            "best": self.to_zonotope("best"),
+            "actual": self.to_zonotope("actual"),
+        }
+        self.as_poly = {}
+        self.as_poly = {
+            "original": self.to_poly(),
+            "full": self.to_poly("full"),
+            "worst": self.to_poly("worst"),
+            "best": self.to_poly("best"),
+            "actual": self.to_poly("actual"),
+        }
 
     def compute_vertices(self):
         """Return the vertices in CCW order."""
@@ -235,12 +279,49 @@ class Rectangle(Polygon):
             ),
         ]
 
+    def get_vertices(self, config, as_array=False):
+        """Return the four vertices given a config.
+        config:
+        None corresponds to the non-centered rectangle.
+        "full" corresponds to the centered rectangle.
+        "actual" corresponds to the actual rectangle.
+        bitarray(b1,b2,b3,b4) where the b's are binary values corresponds to
+        the rectangle with the left (0) or right (1) extremes for each line.
+        "worst" is mapped to bitarray('1111').
+        "best" is mapped to bitarray('0000').
+        """
+        vertices_config = self.vertices_original[:]
+        if config is not None:
+            for edge_idx in range(len(self.edges_original)):
+                edge = self.edges_original[edge_idx]
+                p1, p2 = edge
+                v = GeoTools.get_normal_vect(edge)
+                v = Point(v[0], v[1])
+                p3, p4 = self.edges_original[(edge_idx + 1) % 4]
+                # Make sure v is pointed outward wrt rectangle surface
+                if (p2 - p4).dot(v) < 0:
+                    v = -v
+                if config == "full":
+                    w = self.center_offsets[edge_idx]
+                elif config == "actual":
+                    w = self.actual_errors[edge_idx]
+                else:
+                    if not isinstance(config, bitarray):
+                        config = CONFIG2BIT[config]
+                    w = self.error_bounds[edge_idx, int(config[edge_idx])]
+                vertices_config[edge_idx] += w * v
+                vertices_config[(edge_idx + 1) % 4] += w * v
+        if as_array:
+            return GeoTools.vertices2array(vertices_config)
+        return vertices_config
+
     def set_line_error_bounds(self, line_i, bound_l, bound_r):
         assert line_i < 4
         assert bound_l <= bound_r
         self.error_bounds[line_i] = np.array([bound_l, bound_r])
         self.half_widths[line_i] = (bound_r - bound_l) / 2
         self.center_offsets[line_i] = -abs(bound_l) + self.half_widths[line_i]
+        self.update_stored_configs()
 
     def set_error_bounds(self, bounds_l, bounds_r):
         assert np.all(bounds_l <= bounds_r)
@@ -248,33 +329,49 @@ class Rectangle(Polygon):
         self.error_bounds[:, 1] = bounds_r
         self.half_widths = (bounds_r - bounds_l) / 2
         self.center_offsets = -np.abs(bounds_l) + self.half_widths
+        self.update_stored_configs()
 
     def set_line_actual_error(self, line_i, err):
         assert line_i < 4
         assert self.error_bounds[line_i][0] <= err <= self.error_bounds[line_i][1]
         self.actual_errors[line_i] = err
+        self.update_stored_configs()
 
     def set_actual_errors(self, err):
         assert np.all(self.error_bounds[:, 0] <= err) and np.all(
             self.error_bounds[:, 1] >= err
         )
         self.actual_errors = err
+        self.update_stored_configs()
 
-    def contains(self, p):
+    def contains(self, p, config="worst"):
         """Return True if point p lies within self."""
-        return np.all(self.as_poly.A.dot(p.as_array()) <= self.as_poly.b)
+        if config in self.as_poly:
+            rec_poly = self.as_poly[config]
+        else:
+            rec_poly = self.to_poly(config)
+        A = rec_poly.A
+        b = rec_poly.b
+        return np.all(A.dot(p.as_array()) <= b)
 
-    def get_lines_possibly_seen(self, p):
+    def is_intersected(self, line, config="worst"):
+        for edge in self.edges[config]:
+            if GeoTools.doIntersect(edge[0], edge[1], line[0], line[1]):
+                return True
+        return False
+
+    def get_lines_possibly_seen(self, p, config):
         """Return the list of the subset of self.edges that are
         possibly seen by point p.
         """
-        num_edges = len(self.edges)
+        edges = self.edges[config]
+        num_edges = len(edges)
         for edge_idx in range(num_edges):
             edge_idx_prev = (edge_idx - 1) % num_edges
             edge_idx_next = (edge_idx + 1) % num_edges
-            edge_curr = self.edges[edge_idx]
-            edge_prev = self.edges[edge_idx_prev]
-            edge_next = self.edges[edge_idx_next]
+            edge_curr = edges[edge_idx]
+            edge_prev = edges[edge_idx_prev]
+            edge_next = edges[edge_idx_next]
             dot_prod = (edge_curr[1] - edge_curr[0]).dot(p - edge_curr[0])
             norm_sq = (edge_curr[1] - edge_curr[0]).norm() ** 2
             facing_edge = 0 <= dot_prod <= norm_sq
@@ -295,9 +392,45 @@ class Rectangle(Polygon):
                         return [edge_idx_prev]
                     return [edge_idx_prev, edge_idx]
 
+    def to_poly(self, config=None):
+        """Convert to a Polytope object."""
+        if isinstance(config, str):
+            try:
+                return self.as_poly[config]
+            except KeyError:
+                pass
+        else:
+            try:
+                return self.as_poly[BIT2CONFIG[frozenbitarray(config)]]
+            except KeyError:
+                pass
+        if config in self.as_zono:
+            return self.as_zono[config].to_poly()
+        return self.to_zonotope(config).to_poly()
+
+    def to_zonotope(self, config=None):
+        """Convert to a Zonotope object given a config.
+        """
+        if isinstance(config, str):
+            try:
+                return self.as_zono[config]
+            except KeyError:
+                pass
+        else:
+            try:
+                return self.as_zono[BIT2CONFIG[frozenbitarray(config)]]
+            except KeyError:
+                pass
+        if config in self.vertices:
+            vertices_config = self.vertices[config]
+        else:
+            vertices_config = self.get_vertices(config)
+        center, generators = self.get_center_gen(vertices_config)
+        return Zonotope(center, generators, np.zeros((2, 2)))
+
     def get_center_gen(self, vertices_config=None):
         if vertices_config is None:
-            pA, pB, pC, _ = self.vertices
+            pA, pB, pC, _ = self.vertices_original
         else:
             pA, pB, pC, _ = vertices_config
         gen_1 = (pB - pA) / 2
@@ -306,43 +439,7 @@ class Rectangle(Polygon):
         generators = np.concatenate(([gen_1.as_array()], [gen_2.as_array()])).T
         return center, generators
 
-    def to_zonotope(self, config=None):
-        """Convert to a Zonotope object.
-        config:
-            None corresponds to the non-centered rectangle.
-            "full" corresponds to the centered rectangle.
-            "actual" corresponds to the actual rectangle.
-            bitarray(b1,b2,b3,b4) where the b's are binary values corresponds to
-                the rectangle with the left (0) or right (1) extremes for each line.
-        """
-        vertices_config = self.vertices[:]
-        if config is not None:
-            for edge_idx in range(len(self.edges)):
-                edge = self.edges[edge_idx]
-                p1, p2 = edge
-                v = GeoTools.get_normal_vect(edge)
-                v = Point(v[0], v[1])
-                p3, p4 = self.edges[(edge_idx + 1) % 4]
-                # Make sure v is pointed outward wrt rectangle surface
-                if (p2 - p4).dot(v) < 0:
-                    v = -v
-                if config == "full":
-                    w = self.center_offsets[edge_idx]
-                elif config == "actual":
-                    w = self.actual_errors[edge_idx]
-                else:
-                    w = self.error_bounds[edge_idx][config[edge_idx]]
-                vertices_config[edge_idx] += w * v
-                vertices_config[(edge_idx + 1) % 4] += w * v
-
-        center, generators = self.get_center_gen(vertices_config)
-        return Zonotope(center, generators, np.zeros((2, 2)))
-
-    def to_poly(self, config=None):
-        """Convert to a Polytope object."""
-        return self.to_zonotope(config).to_poly()
-
-    def get_error_bounds(self, as_array=True):
+    def get_error_bounds(self):
         e_l = np.zeros(4)
         e_r = np.zeros(4)
         for i in range(4):
@@ -358,7 +455,7 @@ class Rectangle(Polygon):
         as_goal=False,
     ):
         if show_error_bounds:
-            A, b = self.as_poly.A, self.as_poly.b
+            A, b = self.as_poly["original"].A, self.as_poly["original"].b
             e_l, e_r = self.get_error_bounds()
             e = np.array(self.actual_errors)
             pc.Polytope(A, b + e_l).plot(ax=ax, alpha=0.2, linewidth=2, color="dimgrey")

@@ -16,7 +16,7 @@ class Environment2D:
     def __init__(self, x_lims, y_lims):
         self.x_range = np.array([x_lims, y_lims])
         self.initialize_rectangles()
-        self.vol_tot = self.as_rectangle().as_poly.volume
+        self.vol_tot = self.as_rectangle().as_poly["original"].volume
         self.vol_obs = 0
         self.vol_free = self.vol_tot
         self.nlines_tot = 0
@@ -55,7 +55,7 @@ class Environment2D:
         try:
             assert self.is_valid_rectangle(rectangle, verbose)
             self.rectangles[rectangle.id] = rectangle
-            vertices = rectangle.get_vertices()
+            vertices = rectangle.get_vertices("worst", as_array=True)
             min_values = np.min(vertices, axis=0)
             max_values = np.max(vertices, axis=0)
             self.x_range[0][0], self.x_range[1][0] = (
@@ -66,8 +66,8 @@ class Environment2D:
                 max(self.x_range[0][1], max_values[0] + 1),
                 max(self.x_range[1][1], max_values[1] + 1),
             )
-            self.vol_tot = self.as_rectangle().as_poly.volume
-            self.vol_obs += rectangle.as_poly.volume
+            self.vol_tot = self.as_rectangle().as_poly["original"].volume
+            self.vol_obs += rectangle.as_poly["full"].volume
             self.vol_free = self.vol_tot - self.vol_obs
             self.nlines_tot += 4
         except AssertionError:
@@ -79,7 +79,7 @@ class Environment2D:
         return rectangle.id not in self.rectangles
 
     def is_valid_rectangle(self, rectangle, verbose=True):
-        return GeoTools.is_valid_region(rectangle.as_poly, self, verbose)
+        return GeoTools.is_valid_region(rectangle.as_poly["worst"], self, verbose)
 
     def add_obstacles(self, num_obs, lgth, wdth, ang=None, max_iter=1e3):
         """Add num_obs obstacles of certain length and width, within
@@ -108,21 +108,21 @@ class Environment2D:
                 continue
             added += 1
 
-    def contains(self, p):
+    def contains(self, p, config="worst"):
         for rectangle_id in self.rectangles:
-            if self.rectangles[rectangle_id].contains(p):
+            if self.rectangles[rectangle_id].contains(p, config):
                 return True
         return False
 
-    def is_intersected(self, line, exclude=-1):
+    def is_intersected(self, line, exclude=-1, config="worst"):
         for rectangle_id in self.rectangles:
             if rectangle_id == exclude:
                 continue
-            elif self.rectangles[rectangle_id].is_intersected(line):
+            elif self.rectangles[rectangle_id].is_intersected(line, config):
                 return True
         return False
 
-    def get_lines_seen(self, p):
+    def get_lines_seen(self, p, config):
         """Return the lines of self.rectangles that are
         entirely seen by a point p, in the format:
         {
@@ -134,14 +134,14 @@ class Environment2D:
         for rectangle_id in self.rectangles:
             rectangle = self.rectangles[rectangle_id]
             # All the potentially seen lines
-            lines_possibly_seen = rectangle.get_lines_possibly_seen(p)
+            lines_possibly_seen = rectangle.get_lines_possibly_seen(p, config)
             # Get rid of false positives
-            lines_seen = self.curate_lines(lines_possibly_seen, rectangle_id, p)
+            lines_seen = self.curate_lines(lines_possibly_seen, rectangle_id, p, config)
             if lines_seen:
                 lines_seen_dict[rectangle_id] = lines_seen
         return lines_seen_dict
 
-    def curate_lines(self, lines_possibly_seen, rectangle_id, p):
+    def curate_lines(self, lines_possibly_seen, rectangle_id, p, config):
         """Helper function for self.get_lines_seen.
         Return the lines actually seen by a point p by checking if:
             for each line in lines_possibly_seen:
@@ -152,13 +152,15 @@ class Environment2D:
         """
         lines_seen = []
         for edge_idx in lines_possibly_seen:
-            edge = self.rectangles[rectangle_id].edges[edge_idx]
+            edge = self.rectangles[rectangle_id].edges[config][edge_idx]
             p1, p2 = edge[0], edge[1]
-            if not self.intersects_triangle(p1, p2, p, exclude=rectangle_id):
+            if not self.intersects_triangle(
+                p1, p2, p, exclude=rectangle_id, config=config
+            ):
                 lines_seen.append(edge_idx)
         return lines_seen
 
-    def intersects_triangle(self, p1, p2, p3, exclude):
+    def intersects_triangle(self, p1, p2, p3, exclude, config):
         """Return True if the triangle (p1, p2, p3) collides
         with any of the obstacles contained in self, with the exception
         of one which we choose to exclude.
@@ -166,7 +168,7 @@ class Environment2D:
         for rectangle_id in self.rectangles:
             if rectangle_id == exclude:
                 continue
-            elif self.rectangles[rectangle_id].intersects_triangle(p1, p2, p3):
+            elif self.rectangles[rectangle_id].intersects_triangle(p1, p2, p3, config):
                 return True
         return False
 

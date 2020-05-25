@@ -59,7 +59,9 @@ class Simulator:
         )
 
     def get_obs_matrices(self, x, conf_factor=3):
-        lines_seen_now = PlanUtils.get_lines_seen_now(self.env, Point(x[0], x[1]))
+        lines_seen_now = PlanUtils.get_lines_seen_now(
+            self.env, Point(x[0], x[1]), config="actual"
+        )
         # print("lines_seen_now = {}".format(lines_seen_now))
         C, b_actual, b_half, e = PlanUtils.get_observation_matrices(
             lines_seen_now, self.env, len(x), actual_err=True
