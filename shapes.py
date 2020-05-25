@@ -273,6 +273,7 @@ class Rectangle(Polygon):
             edge_idx_prev = (edge_idx - 1) % num_edges
             edge_idx_next = (edge_idx + 1) % num_edges
             edge_curr = self.edges[edge_idx]
+            edge_prev = self.edges[edge_idx_prev]
             edge_next = self.edges[edge_idx_next]
             dot_prod = (edge_curr[1] - edge_curr[0]).dot(p - edge_curr[0])
             norm_sq = (edge_curr[1] - edge_curr[0]).norm() ** 2
@@ -286,8 +287,12 @@ class Rectangle(Polygon):
                     return [(edge_idx + 2) % num_edges]
             if on_correct_side:
                 if on_right:
+                    if abs((p - edge_curr[1]).dot(edge_next[1] - edge_next[0])) < 1e-5:
+                        return [edge_idx_next]
                     return [edge_idx, edge_idx_next]
                 else:
+                    if abs((p - edge_curr[1]).dot(edge_prev[1] - edge_prev[0])) < 1e-5:
+                        return [edge_idx_prev]
                     return [edge_idx_prev, edge_idx]
 
     def get_center_gen(self, vertices_config=None):
@@ -307,8 +312,8 @@ class Rectangle(Polygon):
             None corresponds to the non-centered rectangle.
             "full" corresponds to the centered rectangle.
             "actual" corresponds to the actual rectangle.
-            bitarray(b1,b2,b3,b4) where the b's are binary values corresponds to the rectangle
-                with the left (0) or right (1) extremes.
+            bitarray(b1,b2,b3,b4) where the b's are binary values corresponds to
+                the rectangle with the left (0) or right (1) extremes for each line.
         """
         vertices_config = self.vertices[:]
         if config is not None:
