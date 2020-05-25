@@ -348,17 +348,23 @@ class Plan:
         """Return a dictionary of format:
         {configId -> corresponding reachable set Xk}
         """
+        amb = self.a - self.b
+        center_offset = self.head + amb.dot(self.path[0])
+        cov_offset = amb.dot(self.P0.dot(amb.T))
+        for n in range(1, self.k+1):
+            cov_offset += self.c[:,:,n].dot(self.Q.dot(self.c[:,:,n].T))
+
         n_extr = len(self.Sn[-1])
         Xks = {}
-        Xk = Zonotope(0, np.zeros(self.n), self.P0)
-        Xk.c += -self.path[0]
-        Xk = Xk.scale(self.a - self.b)
-        Xk.c += self.head
-        W_zonotope = Zonotope(0, np.zeros(self.n), self.Q)
-        for n in range(self.k):
-            Xk += W_zonotope.scale(self.c[:, :, n])
+
         for configID in range(2 ** n_extr):
-            for n in range(self.k):
-                Xks[configID] = Xk + self.Nu[n].at_config(self.Sn[-1], configID).scale(
+            # trick because I don't have a zero zonotope
+            Xks[configID] = self.Nu[1].at_config(self.Sn[-1], configID).scale(
+                    self.d[:, :, 1]
+                )
+            for n in range(2, self.k+1):
+                Xks[configID] += self.Nu[n].at_config(self.Sn[-1], configID).scale(
                     self.d[:, :, n]
                 )
+            Xks[configID].c += center_offset
+            Xks[configID].Sig += cov_offset
