@@ -246,6 +246,8 @@ class Rectangle(Polygon):
         assert np.all(bounds_l <= bounds_r)
         self.error_bounds[:, 0] = bounds_l
         self.error_bounds[:, 1] = bounds_r
+        self.half_widths = (bounds_r - bounds_l) / 2
+        self.center_offsets = -np.abs(bounds_l) + self.half_widths
 
     def set_line_actual_error(self, line_i, err):
         assert line_i < 4
@@ -305,7 +307,7 @@ class Rectangle(Polygon):
             None corresponds to the non-centered rectangle.
             "full" corresponds to the centered rectangle.
             "actual" corresponds to the actual rectangle.
-            [b1,b2,b3,b4] where the b's are binary values corresponds to the rectangle
+            bitarray(b1,b2,b3,b4) where the b's are binary values corresponds to the rectangle
                 with the left (0) or right (1) extremes.
         """
         vertices_config = self.vertices[:]
