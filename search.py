@@ -13,9 +13,7 @@ class Searcher:
         self.pruning_coeff = pruning_coeff
         self.x_init = None
         self.goal_region = None
-        self.P_open = set()
-        self.P = collections.defaultdict(set)
-        self.G = set()
+        self.clear()
         self.prob_threshold = 1.0
 
     def set_source(self, x_init=None):
@@ -23,23 +21,35 @@ class Searcher:
             self.x_init = self.graph.samples[0, :]
         else:
             self.x_init = x_init
-        self.initialize_open()
 
-    def initialize_open(self):
-        self.P_open.add(Plan(self.x_init, None, 0, None))
+    def initialize_open(self, R, kmax):
+        self.clear()
+        self.P_open.add(
+            Plan(self.x_init, self.graph.env, self.x_init.shape[0], R, kmax)
+        )
         self.G = self.P_open
+
+    def clear(self):
+        self.P_open = set()
+        self.P = collections.defaultdict(set)
+        self.G = set()
 
     def set_goal(self, goal_region):
         self.goal_region = goal_region
 
     def is_valid_goal(self, verbose=True):
-        return GeoTools.is_valid_region(self.goal_region, self.graph.env, verbose)
+        try:
+            return GeoTools.is_valid_region(self.goal_region, self.graph.env, verbose)
+        except AttributeError:
+            print("Please set the goal region using .set_goal(goal_region).")
 
     def reached_goal(self):
         return len([p for p in self.G if self.in_goal(p[0])]) != 0
 
     def in_goal(self, point):
-        return self.goal_region.A.dot(point) <= self.goal.b
+        if self.goal_region:
+            return self.goal_region.A.dot(point) <= self.goal.b
+        return False
 
     def remove_dominated(self):
         for p in self.P_open:
@@ -63,12 +73,15 @@ class Searcher:
 
     def explore(self, prob_threshold):
         if self.x_init is None:
-            print("Setting the source node as the first node in the graph.")
-            self.set_source()
+            print("Please set the source node using .set_source(x_init)")
+            raise
+        if len(self.P_open) == 0:
+            print("Please initialize the searcher using .initialize_open(R, kmax).")
+            raise
         try:
             assert self.is_valid_goal()
         except AssertionError:
-            print("Goal region not defined.")
+            print("Invalid goal region.")
             raise
         self.prob_threshold = prob_threshold
         i = 0
