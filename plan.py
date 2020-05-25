@@ -218,6 +218,7 @@ class Plan:
 
     def initialize_Nu(self, start_point, env):
         lines_seen_now = PlanUtils.get_lines_seen_now(env, start_point)
+        self.rectangles_seen_now = lines_seen_now.keys()
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         _, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
         self.Sn = [line_indices]
@@ -235,13 +236,18 @@ class Plan:
         self.gain_ready = True
 
     def set_init_est(self, P0):
+        self.P0 = P0
         self.P = P0
         self.est_ready = True
 
     def is_initialized(self):
         return self.motion_ready and self.gain_ready and self.est_ready
 
-    def add_point(self, env, point, conf_factor=0.5):
+    def update_cost_path(self, cost_to_add, path_to_add):
+        self.cost += cost_to_add
+        self.path_to_add = np.vstack((self.path, path_to_add))
+
+    def add_point(self, env, point, cost_to_add, path_to_add, conf_factor=0.5):
         """
         - get C(k+1), R(k+1)
         - P = Pbar - L*C*Pbar
@@ -251,7 +257,9 @@ class Plan:
         """
         if self.k == 0:
             assert self.is_initialized()
+        self.head = point
         lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
+        self.rectangles_seen_now = lines_seen_now.keys()
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         self.C, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
         Pbar = (self.A.dot(self.P)).dot(self.A.T) + self.Q
@@ -311,10 +319,46 @@ class Plan:
             self.p[:, :, n] = M2.dot(self.A.dot(self.p[:, :, n]))
             self.q[:, :, n] = M2.dot(self.A.dot(self.q[:, :, n]))
 
-    def get_prob_collision(self, env):
+    def get_max_prob_collision(self, env):
         """
         - called after add_point and update
         - now we have everything to compute all possible X(k+1)
           and intersect those with the associated environment
         """
-        pass
+        n_extr = len(self.Sn[-1])
+        Xks = self.get_Xks()
+        p = 0.0
+        for configID in range(2 ** n_extr):
+            for rectangle_idx in self.rectangles_seen_now:
+                p = max(
+                    p,
+                    self.get_prob_collision(
+                        Xks[configID], env.rectangles[rectangle_idx]
+                    ),
+                )
+        return p
+
+    def get_prob_collision(self, Xk, rectangle):
+        """Return the probability of collision between the reachable set
+        Xk and a Rectangle object.
+        """
+        return Xk.get_inter_prob(rectangle.to_zonotope())
+
+    def get_Xks(self):
+        """Return a dictionary of format:
+        {configId -> corresponding reachable set Xk}
+        """
+        n_extr = len(self.Sn[-1])
+        Xks = {}
+        Xk = Zonotope(0, np.zeros(self.n), self.P0)
+        Xk.c += -self.path[0]
+        Xk = Xk.scale(self.a - self.b)
+        Xk.c += self.head
+        W_zonotope = Zonotope(0, np.zeros(self.n), self.Q)
+        for n in range(self.k):
+            Xk += W_zonotope.scale(self.c[:, :, n])
+        for configID in range(2 ** n_extr):
+            for n in range(self.k):
+                Xks[configID] = Xk + self.Nu[n].at_config(self.Sn[-1], configID).scale(
+                    self.d[:, :, n]
+                )
