@@ -33,6 +33,9 @@ class Zonotope:
         p_other = other.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_poly()
         return p_self <= p_other
 
+    def __str__(self):
+        return "({}, {})".format(self.c, self.G)
+
     def scale(self, T):
         self.c = T.dot(self.c)
         self.G = T.dot(self.G)
