@@ -234,6 +234,9 @@ class Plan:
         Nu_new = NuValues(self.Sn[0], w, self.R, self._nlines_tot)
         self.Nu = [Nu_new]
 
+        # initialize Nu_full
+        self.Nu_full = [Zonotope(np.zeros(w.shape), w, self.R*np.eye(w.shape[0]))]
+
     def set_motion(self, A, B, Q):
         self.A = A
         self.B = B
@@ -299,6 +302,7 @@ class Plan:
 
         Nu_new = NuValues(self.Sn[self.k + 1], w, self.R, self._nlines_tot)
         self.Nu.append(Nu_new)
+        self.Nu_full.append(Zonotope(np.zeros(w.shape), w, self.R*np.eye(w.shape[0])))
         self.k += 1
 
     def update_coeffs(self):
