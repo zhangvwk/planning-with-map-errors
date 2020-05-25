@@ -78,27 +78,17 @@ class Searcher:
                     discard = False
                     neighbor_idx = k
                     to_neighbor_cost, to_neighbor_path = v
-                    zonotope_state_sub = p.zonotope_state
                     for sub_neighbor in to_neighbor_path:
-                        zonotope_state_sub = self.reachability_filter.propagate(
-                            sub_neighbor, zonotope_state_sub
-                        )  # add lines seen?
-                        prob_collision = self.reachability_filter.get_probability(
-                            self.graph, zonotope_state_sub
-                        )
+                        p.add_point(self.graph_env, sub_neighbor)
+                        prob_collision = p.get_prob_collision(self.graph.env)
                         if self.collision(prob_collision):
                             break
                             discard = True
                     if discard:
                         continue
-                    q = Plan(
-                        neighbor_idx,
-                        np.vstack((p.path, to_neighbor_path)),
-                        p.cost + to_neighbor_cost,
-                        zonotope_state_sub,
-                    )
-                    self.P[neighbor_idx].add(q)
-                    self.P_open.add(q)
+                    p.update_info(to_neighbor_cost, to_neighbor_path)
+                    self.P[neighbor_idx].add(p)
+                    self.P_open.add(p)
             self.remove_dominated()
             self.P_open -= self.G
             i += 1
