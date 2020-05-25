@@ -80,7 +80,7 @@ class Searcher:
                     to_neighbor_cost, to_neighbor_path = v
                     for sub_neighbor in to_neighbor_path:
                         p.add_point(self.graph_env, sub_neighbor)
-                        prob_collision = p.get_prob_collision(self.graph.env)
+                        prob_collision = p.get_max_prob_collision(self.graph.env)
                         if self.collision(prob_collision):
                             break
                             discard = True
