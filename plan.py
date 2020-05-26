@@ -327,20 +327,23 @@ class Plan:
         self.p[:, :, self.k] = -M2
 
         m = self.L.shape[1]
-        self.d = np.zeros((self.n, m, self.k+1))
-        self.q = np.zeros((self.n, m, self.k+1))
-        self.q[:, :, self.k] = self.L
+        d_next = np.zeros((self.n, m, self.k+1))
+        q_next = np.zeros((self.n, m, self.k+1))
+        q_next[:, :, self.k] = self.L
 
         # n = 0 ... self.k-1
         for n in range(self.k):
             self.c[:, :, n] = M1.dot(self.c[:, :, n]) - self.B.dot(
                 self.K.dot(self.p[:, :, n])
             )
-            self.d[:, :, n] = M1.dot(self.d[:, :, n]) - self.B.dot(
+            d_next[:, :, n] = M1.dot(self.d[:, :, n]) - self.B.dot(
                 self.K.dot(self.q[:, :, n])
             )
             self.p[:, :, n] = M2.dot(self.A.dot(self.p[:, :, n]))
-            self.q[:, :, n] = M2.dot(self.A.dot(self.q[:, :, n]))
+            q_next[:, :, n] = M2.dot(self.A.dot(self.q[:, :, n]))
+
+        self.d = d_next
+        self.q = q_next
 
     def get_max_prob_collision(self, env):
         """
