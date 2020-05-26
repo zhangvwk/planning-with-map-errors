@@ -207,13 +207,14 @@ class Plan:
         self.b = np.zeros((self.n, self.n))
         self.e = np.eye(self.n)
 
-        # Coefficients that require the entire history
+        # Coefficients that require the entire history whose shape does not change
         self.c = np.zeros((self.n, self.n, self.kmax))
         self.c[:, :, 0] = np.eye(2)
-        self.d = np.zeros((self.n, self.n, self.kmax))
-        self.d[:, :, 0] = np.zeros(2)
         self.p = np.zeros((self.n, self.n, self.kmax))
-        self.q = np.zeros((self.n, self.n, self.kmax))
+
+        # same as above but changing shapes
+        self.d = None
+        self.q = None
 
         # Estimation matrices
         self.A = None
@@ -324,6 +325,10 @@ class Plan:
 
         self.c[:, :, self.k] = np.eye(2)
         self.p[:, :, self.k] = -M2
+
+        m = self.L.shape[1]
+        self.d = np.zeros((self.n, m, self.k+1))
+        self.q = np.zeros((self.n, m, self.k+1))
         self.q[:, :, self.k] = self.L
 
         # n = 0 ... self.k-1
