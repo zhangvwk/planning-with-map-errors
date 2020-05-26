@@ -5,6 +5,8 @@ import collections
 # Custom libraries
 from plan import Plan
 from utils import GeoTools
+from polytope import Polytope
+from shapes import Point
 
 
 class Searcher:
@@ -12,21 +14,26 @@ class Searcher:
         self.graph = graph
         self.pruning_coeff = pruning_coeff
         self.x_init = None
+        self.start_idx = None
         self.goal_region = None
         self.clear()
         self.prob_threshold = 1.0
 
-    def set_source(self, x_init=None):
-        if not x_init:
-            self.x_init = self.graph.samples[0, :]
-        else:
-            self.x_init = x_init
+    def set_source(self, start_idx=0):
+        self.start_idx = start_idx
+        self.x_init = self.graph.samples[start_idx, :]
 
-    def initialize_open(self, R, kmax):
+    def initialize_open(self, Q, R, P0, kmax):
         self.clear()
-        self.P_open.add(
-            Plan(self.x_init, self.graph.env, self.x_init.shape[0], R, kmax)
+        p_init = Plan(
+            self.x_init, self.start_idx, self.graph.env, self.x_init.shape[0], R, kmax,
         )
+        # Set variables in p_init
+        p_init.set_motion(self.graph.planner.A, self.graph.planner.B, Q)
+        p_init.set_gain(self.graph.planner.gain)
+        p_init.set_init_est(P0)
+        self.P_open.add(p_init)
+        self.P[0] = self.P_open
         self.G = self.P_open
 
     def clear(self):
@@ -35,20 +42,29 @@ class Searcher:
         self.G = set()
 
     def set_goal(self, goal_region):
+        """Input must be a Polytope object.
+        """
+        if not isinstance(goal_region, Polytope):
+            print("Goal region must be a Polytope object.")
+            raise
         self.goal_region = goal_region
 
-    def is_valid_goal(self, verbose=True):
+    def is_valid_goal(self, config="worst", verbose=True):
         try:
-            return GeoTools.is_valid_region(self.goal_region, self.graph.env, verbose)
+            return GeoTools.is_valid_region(
+                self.goal_region, self.graph.env, verbose, config=config
+            )
         except AttributeError:
             print("Please set the goal region using .set_goal(goal_region).")
 
     def reached_goal(self):
-        return len([p for p in self.G if self.in_goal(p[0])]) != 0
+        return len([p for p in self.G if self.in_goal(Point(p.head[0], p.head[1]))])
 
     def in_goal(self, point):
         if self.goal_region:
-            return self.goal_region.A.dot(point) <= self.goal.b
+            return np.all(
+                self.goal_region.A.dot(point.as_array()) <= self.goal_region.b
+            )
         return False
 
     def remove_dominated(self):
@@ -71,6 +87,14 @@ class Searcher:
     def collision(self, prob_collision):
         return prob_collision <= self.prob_threshold
 
+    def get_candidates(self):
+        P_candidates = set()
+        for head_idx in self.P:
+            if self.in_goal(
+                Point(self.graph.samples[head_idx][0], self.graph.samples[head_idx][1])
+            ):
+                P_candidates.update(self.P[head_idx])
+
     def explore(self, prob_threshold):
         if self.x_init is None:
             print("Please set the source node using .set_source(x_init)")
@@ -85,21 +109,22 @@ class Searcher:
             raise
         self.prob_threshold = prob_threshold
         i = 0
-        while not self.P_open and not self.reached_goal():
+        while self.P_open and not self.reached_goal():
             for p in self.G:
+                # print("==== Outer for p = {} ====".format(p.))
                 for k, v in self.graph.edges[p.head_idx].items():
                     discard = False
                     neighbor_idx = k
                     to_neighbor_cost, to_neighbor_path = v
                     for sub_neighbor in to_neighbor_path:
-                        p.add_point(self.graph_env, sub_neighbor)
+                        p.add_point(self.graph.env, sub_neighbor)
                         prob_collision = p.get_max_prob_collision(self.graph.env)
                         if self.collision(prob_collision):
                             break
                             discard = True
                     if discard:
                         continue
-                    p.update_info(to_neighbor_cost, to_neighbor_path)
+                    p.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
                     self.P[neighbor_idx].add(p)
                     self.P_open.add(p)
             self.remove_dominated()
@@ -107,4 +132,8 @@ class Searcher:
             i += 1
             self.prune(i)
         P_candidates = self.get_candidates()
+        print("P_candidates = {}".format(P_candidates))
+        if not P_candidates:
+            print("Could not find a path.")
+            return None
         return min(P_candidates, key=lambda plan: plan.cost)

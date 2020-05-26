@@ -64,11 +64,11 @@ class PlanUtils:
         return C.dot(state) + b + e
 
     @staticmethod
-    def get_Rhat(R, e, conf_factor):
-        m = len(e)  # number of measurements
+    def get_Rhat(R, w, conf_factor):
+        m = len(w)  # number of measurements
         Rhat = np.zeros((m, m))
         for i in range(m):
-            Rhat[i, i] = ((e[i] / conf_factor) + np.sqrt(R)) ** 2
+            Rhat[i, i] = ((w[i] / conf_factor) + np.sqrt(R)) ** 2
         return Rhat
 
     @staticmethod
@@ -183,10 +183,11 @@ class NuValues:
 
 
 class Plan:
-    def __init__(self, start_point, env, n, R=0.1, kmax=100):
+    def __init__(self, start_point, start_idx, env, n, R=0.1, kmax=100):
         self.head = start_point
-        self.path = []
+        self.path = [start_point]
         self.cost = 0
+        self.head_idx = start_idx
 
         self.R = R  # 1D distance measurement variance
         self.n = n
@@ -196,6 +197,9 @@ class Plan:
 
         self.initialize_variables()
         self.initialize_Nu(start_point, env)
+
+    def update_head_idx(self, head_idx):
+        self.head_idx = head_idx
 
     def initialize_variables(self):
         # Coefficients that do not require the entire history
@@ -255,11 +259,12 @@ class Plan:
     def is_initialized(self):
         return self.motion_ready and self.gain_ready and self.est_ready
 
-    def update_cost_path(self, cost_to_add, path_to_add):
+    def update_info(self, head_idx, cost_to_add, path_to_add):
+        self.head_idx = head_idx
         self.cost += cost_to_add
         self.path_to_add = np.vstack((self.path, path_to_add))
 
-    def add_point(self, env, point, cost_to_add, path_to_add, conf_factor=0.5):
+    def add_point(self, env, point, conf_factor=0.5):
         """
         - get C(k+1), R(k+1)
         - P = Pbar - L*C*Pbar
@@ -275,7 +280,7 @@ class Plan:
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         self.C, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
         Pbar = (self.A.dot(self.P)).dot(self.A.T) + self.Q
-        Rhat = PlanUtils.get_Rhat(self.R, self.e, conf_factor)
+        Rhat = PlanUtils.get_Rhat(self.R, w, conf_factor)
         self.L = (Pbar.dot(self.C.T)).dot(
             np.linalg.inv((self.C.dot(Pbar)).dot(self.C.T)) + Rhat
         )

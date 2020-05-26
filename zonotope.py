@@ -37,6 +37,9 @@ class Zonotope:
         return "({}, {})".format(self.c, self.G)
 
     def scale(self, T):
+        print("T = {}".format(T))
+        print("c = {}".format(self.c))
+        print("G = {}".format(self.G))
         self.c = T.dot(self.c)
         self.G = T.dot(self.G)
         self.Sig = T.dot(self.Sig.dot(T.transpose()))
