@@ -30,14 +30,14 @@ class LQRPlanner:
     def compute_gain(self):
         """Solve infinite horizon discrete ARE."""
         V = solve_discrete_are(self.A, self.B, self.Q, self.R)
-        self.lqr_gain = np.linalg.inv(self.R + self.B.T.dot(V.dot(self.B)))
-        self.lqr_gain = self.lqr_gain.dot(self.B.T.dot(V.dot(self.A)))
+        self.gain = np.linalg.inv(self.R + self.B.T.dot(V.dot(self.B)))
+        self.gain = self.gain.dot(self.B.T.dot(V.dot(self.A)))
 
     def get_gain(self):
         """Return the LQR gain.
         Meant to be called outside the class.
         """
-        return self.lqr_gain
+        return self.gain
 
     def compute_path(self, u, v, max_iter=1000, tol=1e-3):
         """Compute a path from u to v using an LQR regulator
@@ -56,7 +56,7 @@ class LQRPlanner:
 
         while not done:
             x = path[iteration]
-            control = -self.lqr_gain.dot(x)
+            control = -self.gain.dot(x)
             cost += 0.5 * x.T.dot(self.Q.dot(x)) + 0.5 * control.T.dot(
                 self.R.dot(control)
             )
