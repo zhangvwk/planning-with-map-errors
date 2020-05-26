@@ -239,7 +239,7 @@ class Plan:
         self.Nu = [Nu_new]
 
         # initialize Nu_full
-        self.Nu_full = [Zonotope(np.zeros(w.shape), w, self.R*np.eye(w.shape[0]))]
+        self.Nu_full = [Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))]
 
     def set_motion(self, A, B, Q):
         self.A = A
@@ -307,7 +307,7 @@ class Plan:
 
         Nu_new = NuValues(self.Sn[self.k + 1], w, self.R, self._nlines_tot)
         self.Nu.append(Nu_new)
-        self.Nu_full.append(Zonotope(np.zeros(w.shape), w, self.R*np.eye(w.shape[0])))
+        self.Nu_full.append(Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0])))
         self.k += 1
 
     def update_coeffs(self):
@@ -344,7 +344,7 @@ class Plan:
           and intersect those with the associated environment
         """
         n_extr = len(self.Sn[-1])
-        Xks, configID2recconfig = self.get_Xks()
+        Xks = self.get_Xks()
         p = 0.0
         for configID in range(2 ** n_extr):
             bconfig = self.configID2bitarray(configID, self.Sn[-1], self._nlines_tot)
@@ -355,7 +355,6 @@ class Plan:
                     self.get_prob_collision(
                         Xks[configID],
                         env.rectangles[rectangle_idx].to_zonotope(config),
-                        configID2recconfig[configID][rectangle_idx],
                     ),
                 )
         return p
@@ -378,7 +377,6 @@ class Plan:
 
         n_extr = len(self.Sn[-1])
         Xks = {}
-        configID2recconfig = {}
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
             Xks[configID] = (
@@ -390,12 +388,4 @@ class Plan:
                 )
             Xks[configID].c += center_offset
             Xks[configID].Sig += cov_offset
-
-            bconfig = self.configID2bitarray(configID, self.Sn[-1], self._nlines_tot)
-            recconfig = {}
-            for rectangle_idx in range(0, int(len(bconfig) / 4)):
-                config = bconfig[rectangle_idx * 4 : (rectangle_idx + 1) * 4]
-                if any(config):
-                    recconfig[rectangle_idx] = config
-            configID2recconfig[configID] = recconfig
-        return Xks, configID2recconfig
+        return Xks
