@@ -393,13 +393,20 @@ class Plan:
         n_extr = len(self.Sn[-1])
         Xks = {}
 
+        for i in range(len(self.Nu)):
+            print(i)
+            for key, val in self.Nu[i]._values.items():
+                print(val.G.shape, end=' ')
+                print(val.G)
+
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
             Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[-1], configID))
             Xks[configID].scale(self.d[:, :, 1])
             for n in range(2, self.k + 1):
-                Xks[configID] += deepcopy(self.Nu[n].at_config(self.Sn[-1], configID))
-                Xks[configID].scale(self.d[:, :, n])
+                tmp = deepcopy(self.Nu[n].at_config(self.Sn[-1], configID))
+                tmp.scale(self.d[:, :, n])
+                Xks[configID] += tmp
             Xks[configID].c += center_offset
             Xks[configID].Sig += cov_offset
         return Xks

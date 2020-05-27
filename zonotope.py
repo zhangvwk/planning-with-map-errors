@@ -23,7 +23,8 @@ class Zonotope:
 
     def __add__(self, other):
         c = self.c + other.c
-        G = np.hstack((self.G, other.G.reshape(2, -1)))
+        G = np.hstack((self.G.reshape(self.G.shape[0], -1),
+            other.G.reshape(other.G.shape[0], -1)))
         Sig = self.Sig + other.Sig
         return Zonotope(c, G, Sig)
 
@@ -37,9 +38,6 @@ class Zonotope:
         return "({}, {})".format(self.c, self.G)
 
     def scale(self, T):
-        print("T = {}".format(T))
-        print("c = {}".format(self.c))
-        print("G = {}".format(self.G))
         self.c = T.dot(self.c)
         self.G = T.dot(self.G)
         self.Sig = T.dot(self.Sig.dot(T.transpose()))
