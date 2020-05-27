@@ -387,9 +387,8 @@ class Plan:
         Xks = {}
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
-            Xks[configID] = (
-                self.Nu[1].at_config(self.Sn[-1], configID).scale(self.d[:, :, 1])
-            )
+            Xks[configID] = self.Nu[1].at_config(self.Sn[-1], configID)
+            Xks[configID].scale(self.d[:, :, 1])
             for n in range(2, self.k + 1):
                 Xks[configID] += (
                     self.Nu[n].at_config(self.Sn[-1], configID).scale(self.d[:, :, n])
