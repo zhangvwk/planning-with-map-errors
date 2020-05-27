@@ -306,9 +306,10 @@ class Plan:
                     or np.intersect1d(missing, self.Sn[n]).size == 0
                 ):
                     self.Nu[n].set_values(self.Sn[n], self.Sn[self.k + 1])
-        print("self.Sn[self.k + 1] = {}".format(self.Sn[self.k + 1]))
+
         Nu_new = NuValues(self.Sn[self.k + 1], w, self.R, self._nlines_tot)
         self.Nu.append(Nu_new)
+
         self.Nu_full.append(Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0])))
         self.k += 1
 
@@ -391,15 +392,14 @@ class Plan:
 
         n_extr = len(self.Sn[-1])
         Xks = {}
-        print("len.Nu = {}".format(len(self.Nu)))
+
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
-            Xks[configID] = self.Nu[1].at_config(self.Sn[-1], configID)
+            Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[-1], configID))
             Xks[configID].scale(self.d[:, :, 1])
             for n in range(2, self.k + 1):
-                Xks[configID] += (
-                    self.Nu[n].at_config(self.Sn[-1], configID).scale(self.d[:, :, n])
-                )
+                Xks[configID] += deepcopy(self.Nu[n].at_config(self.Sn[-1], configID))
+                Xks[configID].scale(self.d[:, :, n])
             Xks[configID].c += center_offset
             Xks[configID].Sig += cov_offset
         return Xks
