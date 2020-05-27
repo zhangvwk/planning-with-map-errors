@@ -295,7 +295,7 @@ class Plan:
         self.update_coeffs()
 
     def update_Nu(self, env, lines, w):
-        print("========== k = {}".format(self.k))
+        # print("========== k = {}".format(self.k))
         self.Sn.append(lines)
         prev_lines = self.Sn[self.k]  # self.k not updated yet
         same = np.intersect1d(lines, prev_lines)
@@ -374,7 +374,6 @@ class Plan:
         """Return the probability of collision between the reachable set
         Xk and a Rectangle object.
         """
-        # print("here")
         return Xk.get_inter_prob(rectangle_zono, scaling_factors)
 
     def get_Xks(self):

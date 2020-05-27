@@ -25,7 +25,7 @@ class Searcher:
         self.x_init = self.graph.samples[start_idx, :]
 
     def initialize_open(self, Q, R, P0, kmax):
-        print("[INFO] Calling initialize_open")
+        # print("[INFO] Calling initialize_open")
         self.clear()
         self.plan_number = 0
         p_init = Plan(
@@ -39,8 +39,8 @@ class Searcher:
         self.P[0] = set()
         self.P[0].add(deepcopy(p_init))
         self.G = self.P_open.copy()
-        print("P = {}".format(self.P))
-        print("P_open = {}".format(self.P_open))
+        # print("P = {}".format(self.P))
+        # print("P_open = {}".format(self.P_open))
 
     def clear(self):
         self.P_open = set()
@@ -80,11 +80,11 @@ class Searcher:
         return False
 
     def remove_dominated(self):
-        print(
-            "===================== [INFO] Calling remove_dominated ======================"
-        )
-        print("P_open before = {}".format(self.P_open))
-        print("P before = {}".format(self.P))
+        # print(
+        #     "===================== [INFO] Calling remove_dominated ======================"
+        # )
+        # print("P_open before = {}".format(self.P_open))
+        # print("P before = {}".format(self.P))
         for p, plan_number in self.P_open:
             for q_idx in self.P:
                 if q_idx != p.head_idx:
@@ -96,19 +96,21 @@ class Searcher:
                         if lower_cost and enclosed:
                             self.P_open.remove((p, plan_number))
                             self.P.remove(p)
-        print("P_open after = {}".format(self.P_open))
-        print("P after = {}".format(self.P))
+        # print("P_open after = {}".format(self.P_open))
+        # print("P after = {}".format(self.P))
 
     def prune(self, i):
-        print(
-            "=========================== [INFO] Calling prune ==========================="
-        )
-        print("G before = {}".format(self.G))
+        # print(
+        #     "=========================== [INFO] Calling prune ==========================="
+        # )
+        # print("G before = {}".format(self.G))
         self.G = set()
         for p, plan_number in self.P_open:
+            # print("p.cost = {}".format(p.cost))
+            # print("i * self.pruning_coeff = {}".format(i * self.pruning_coeff))
             if p.cost <= i * self.pruning_coeff:
                 self.G.add((p, plan_number))
-        print("G after = {}".format(self.G))
+        # print("G after = {}".format(self.G))
 
     def collision(self, prob_collision):
         return self.prob_threshold <= prob_collision
@@ -136,20 +138,22 @@ class Searcher:
         self.prob_threshold = prob_threshold
         i = 0
         while self.P_open and not self.reached_goal():
-            print("P_open = {}".format(self.P_open))
-            print("G = {}".format(self.G))
+            # print("P_open = {}".format(self.P_open))
+            # print("G = {}".format(self.G))
             list_G = list(self.G)
             for p, plan_number in list_G:
                 print(
-                    "========== p = {} ==========".format(
-                        self.graph.samples[p.head_idx]
+                    "========== p = {} at index {} ==========".format(
+                        self.graph.samples[p.head_idx], p.head_idx
                     )
                 )
                 for k, v in self.graph.edges[p.head_idx].items():
                     discard = False
+                    # print("k = {}".format(k))
+                    # print("v = {}".format(v))
                     neighbor_idx = k
                     to_neighbor_cost, to_neighbor_path = v
-                    print("----- neighbor_idx = {} -----".format(neighbor_idx))
+                    # print("----- neighbor_idx = {} -----".format(neighbor_idx))
                     for sub_neighbor in to_neighbor_path[1:]:
                         # print("== sub-neighbor = {} ==".format(sub_neighbor))
                         p.add_point(self.graph.env, sub_neighbor)
@@ -158,26 +162,26 @@ class Searcher:
                         )
                         # print("prob_collision = {}".format(prob_collision))
                         if self.collision(prob_collision):
-                            print("prob_collision = {}".format(prob_collision))
-                            print("collided!")
+                            # print("prob_collision = {}".format(prob_collision))
+                            # print("collided!")
                             discard = True
                             break
                     if discard:
-                        print("discarded")
+                        # print("discarded")
                         continue
-                    print("adding to P and P_open")
+                    # print("adding to P and P_open")
                     p.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
                     self.plan_number += 1
                     q = deepcopy(p)
                     self.P[neighbor_idx].add(q)
                     self.P_open.add((q, self.plan_number))
-                    print("P = {}".format(self.P))
-                    print("P_open = {}".format(self.P_open))
+                    # print("P = {}".format(self.P))
+                    # print("P_open = {}".format(self.P_open))
             self.remove_dominated()
-            print("removing G from P_open")
+            # print("removing G from P_open")
             self.P_open -= self.G
-            print("P_open = {}".format(self.P_open))
-            print("G = {}".format(self.G))
+            # print("P_open = {}".format(self.P_open))
+            # print("G = {}".format(self.G))
             i += 1
             self.prune(i)
         P_candidates = self.get_candidates()
