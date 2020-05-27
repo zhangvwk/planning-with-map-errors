@@ -331,8 +331,8 @@ class Plan:
         q_next = np.zeros((self.n, m, self.k+1))
         q_next[:, :, self.k] = self.L
 
-        # n = 0 ... self.k-1
-        for n in range(self.k):
+        # n = 1 ... self.k-1
+        for n in range(1, self.k):
             self.c[:, :, n] = M1.dot(self.c[:, :, n]) - self.B.dot(
                 self.K.dot(self.p[:, :, n])
             )
