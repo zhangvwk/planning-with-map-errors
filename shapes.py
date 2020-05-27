@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.constants import degree
 import polytope as pc
-from bitarray import bitarray, frozenbitarray
+from bitarray import frozenbitarray
 
 # Custom libraries
 from utils import GeoTools
@@ -345,7 +345,7 @@ class Rectangle(Polygon):
         self.update_stored_configs()
 
     def contains(self, p, config="worst"):
-        """Return True if point p lies within self."""
+        """Return True if Point object p lies within self."""
         if config in self.as_poly:
             rec_poly = self.as_poly[config]
         else:
