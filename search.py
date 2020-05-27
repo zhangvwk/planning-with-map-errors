@@ -85,7 +85,7 @@ class Searcher:
                 self.G.add(p)
 
     def collision(self, prob_collision):
-        return prob_collision <= self.prob_threshold
+        return self.prob_threshold <= prob_collision
 
     def get_candidates(self):
         P_candidates = set()
@@ -116,13 +116,13 @@ class Searcher:
                     discard = False
                     neighbor_idx = k
                     to_neighbor_cost, to_neighbor_path = v
-                    print("to_neighbor_path = {}".format(to_neighbor_path))
-                    for sub_neighbor in to_neighbor_path:
+                    for sub_neighbor in to_neighbor_path[1:]:
                         print("== sub-neighbor = {} ==".format(sub_neighbor))
                         p.add_point(self.graph.env, sub_neighbor)
                         prob_collision = p.get_max_prob_collision(
                             self.graph.env, scaling_factors
                         )
+                        print("prob_collision = {}".format(prob_collision))
                         if self.collision(prob_collision):
                             break
                             discard = True
