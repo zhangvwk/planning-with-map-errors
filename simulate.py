@@ -8,6 +8,12 @@ from plan import PlanUtils
 from shapes import Point
 
 
+class CollisionError(Exception):
+    """Raised when there is a collision."""
+
+    pass
+
+
 class Simulator:
     """Simulator class for rolling out trajectories given nominal waypoints and inputs.
     """
@@ -101,44 +107,39 @@ class Simulator:
         P_est = self.P_est_0
         x_ests = [x_est]
         x_bars = []
+        collision = False
         for k in range(len(x_noms)):
-            # print("==========================")
-            # print("x = {}".format(x))
             u = self.get_controls(u_noms[k], x_est, x_noms[k])
-            # print("u = {}".format(u))
             x_bar, P_bar = self.predict(x_est, u, P_est)
-            # print("x_bar, P_bar = {}, {}".format(x_bar, P_bar))
             x = self.simulate_state(x, u)
-            # print("x = {}".format(x))
+            if self.env.contains(x, Point(x[0], x[1]), config="actual"):
+                collision = True
             C, b_actual, b_half, e, Rhat = self.get_obs_matrices(x)
-            # print(
-            #     "C, b_actual, b_half, Rhat = {},{},{},{}".format(
-            #         C, b_actual, b_half, Rhat
-            #     )
-            # )
             z = self.simulate_obs(x, C, b_actual)
             try:
                 L = self.get_kalman_gain(P_bar, C, Rhat)
                 x_est, P_est = self.innovate(x_bar, L, z, C, b_half, P_bar)
             except:
                 x_est, P_est = x_bar, P_bar
-            # print("x_est, P_est = {},{}".format(x_est, P_est))
             xs.append(x)
             x_ests.append(x_est)
             x_bars.append(x_bar)
-        return xs, x_ests, x_bars
+        return xs, x_ests, x_bars, collision
 
     def run(self, iters, x0, S, x_noms, u_noms, verbose=True):
         xs = {}
         x_ests = {}
         x_bars = {}
+        num_collisions = 0
         for i in tqdm(range(iters)):
-            xs[i], x_ests[i], x_bars[i] = self.rollout(
+            xs[i], x_ests[i], x_bars[i], collision = self.rollout(
                 x0 + np.random.multivariate_normal(np.zeros(S.shape[0]), S),
                 x_noms,
                 u_noms,
             )
-        return xs, x_ests, x_bars
+            num_collisions += int(collision)
+        prob_collision = float(num_collisions / iters)
+        return xs, x_ests, x_bars, prob_collision
 
     def plot_traj(self, x, linestyle="-", color="r"):
         x_list, y_list = map(list, zip(*[(state[0], state[1]) for state in x]))
