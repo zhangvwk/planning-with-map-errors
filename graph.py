@@ -86,9 +86,9 @@ class Graph:
 
     def get_heuristic_r(self, n):
         eps = self.env.vol_free / n
-        return eps * (1 + 3 * eps)
+        return eps * (1 + 3.5 * eps)
 
-    def build(self, n, r=None, max_neighbors=6, config="worst", timing=True):
+    def build(self, n, r=None, max_neighbors=6, config="worst", tol=1e-2, timing=True):
         """Build the graph.
         Args:
             n (int): Number of nodes to sample.
@@ -100,18 +100,21 @@ class Graph:
         if r is None:
             r = self.get_heuristic_r(n)
         self.r = r
-        t0 = time.time()
-        self.sample_free(n, config)
-        t1 = time.time()
-        if timing:
-            print("Sampling took: {:0.2f} s.".format(t1 - t0))
+        not_sampled = np.all(np.abs(self.samples - np.zeros((1, self.dim))) < 1e-5)
+        if not_sampled:
+            t0 = time.time()
+            self.sample_free(n, config)
+            t1 = time.time()
+            if timing:
+                print("Sampling took: {:0.2f} s.".format(t1 - t0))
+        t2 = time.time()
         if max_neighbors is None:
             max_neighbors = len(self.samples)
         for src_idx in range(len(self.samples)):
-            self.connect(src_idx, r, max_neighbors, config)
-        t2 = time.time()
+            self.connect(src_idx, r, max_neighbors, config, tol)
+        t3 = time.time()
         if timing:
-            print("Connecting took: {:0.2f} s.".format(t2 - t1))
+            print("Connecting took: {:0.2f} s.".format(t3 - t2))
 
     def sample_free(self, n, config):
         """Sample n nodes in the free space."""
@@ -129,7 +132,7 @@ class Graph:
         """Add a sample to the current set of samples."""
         self.samples = np.vstack((self.samples, new_samples))
 
-    def connect(self, src_idx, r, max_neighbors, config):
+    def connect(self, src_idx, r, max_neighbors, config, tol):
         """Connect src_idx'th node to any other node in the graph,
         in the limit of a total of max_neighbors, for which the optimal
         cost is less than r and for which the optimal trajectory lies in the free space.
@@ -145,14 +148,14 @@ class Graph:
             self.samples[src_idx], k=min(max_neighbors, len(self.samples))
         )[1][1:]:
             cost, traj = self.compute_path(
-                self.samples[src_idx], self.samples[dest_idx]
+                self.samples[src_idx], self.samples[dest_idx], tol
             )
             if cost <= r and not self.intersects(traj, config):
                 self.edges[src_idx][dest_idx] = (cost, traj)
 
-    def compute_path(self, u, v):
+    def compute_path(self, u, v, tol):
         """Wrapper around the planner attribute."""
-        return self.planner.compute_path(u, v)
+        return self.planner.compute_path(u, v, tol=tol)
 
     def intersects(self, traj, config):
         """Return false if a trajectory lies in the free space."""
