@@ -23,8 +23,9 @@ class Zonotope:
 
     def __add__(self, other):
         c = self.c + other.c
-        G = np.hstack((self.G.reshape(self.G.shape[0], -1),
-            other.G.reshape(other.G.shape[0], -1)))
+        G = np.hstack(
+            (self.G.reshape(self.G.shape[0], -1), other.G.reshape(other.G.shape[0], -1))
+        )
         Sig = self.Sig + other.Sig
         return Zonotope(c, G, Sig)
 
@@ -41,6 +42,9 @@ class Zonotope:
         self.c = T.dot(self.c)
         self.G = T.dot(self.G)
         self.Sig = T.dot(self.Sig.dot(T.transpose()))
+        # print("c = {}".format(self.c))
+        # print("T = {}".format(T))
+        # print("Sig = {}".format(self.Sig))
 
     def to_H(self):
         """Convert to an hyper-plane representation of a polytope
@@ -48,6 +52,8 @@ class Zonotope:
         This operation is expensive but tractable when n=2.
         For more details, see Matthias' thesis, p. 15.
         """
+        if len(self.G.shape) == 1:
+            self.G = np.reshape(self.G, (self.G.shape[0], 1))
         n = self.G.shape[0]
         e = self.G.shape[1]
         assert n == 2  # what follows is only valid in 2D

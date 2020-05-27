@@ -8,12 +8,6 @@ from plan import PlanUtils
 from shapes import Point
 
 
-class CollisionError(Exception):
-    """Raised when there is a collision."""
-
-    pass
-
-
 class Simulator:
     """Simulator class for rolling out trajectories given nominal waypoints and inputs.
     """
@@ -68,7 +62,6 @@ class Simulator:
         lines_seen_now = PlanUtils.get_lines_seen_now(
             self.env, Point(x[0], x[1]), config="actual"
         )
-        # print("lines_seen_now = {}".format(lines_seen_now))
         C, b_actual, b_half, e = PlanUtils.get_observation_matrices(
             lines_seen_now, self.env, len(x), actual_err=True
         )
@@ -86,9 +79,7 @@ class Simulator:
 
     def predict(self, x_est, u, P_est):
         x_bar = self.A.dot(x_est) + self.B.dot(u)
-        # print("Q = {}".format(self.Q))
         P_bar = (self.A.dot(P_est)).dot(self.A.T) + self.Q
-        # print("P_bar = {}".format(P_bar))
         return x_bar, P_bar
 
     def get_kalman_gain(self, P_bar, C, Rhat):

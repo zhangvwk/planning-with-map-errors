@@ -198,9 +198,6 @@ class Plan:
         self.initialize_variables()
         self.initialize_Nu(start_point, env)
 
-    def update_head_idx(self, head_idx):
-        self.head_idx = head_idx
-
     def initialize_variables(self):
         # Coefficients that do not require the entire history
         self.a = np.eye(self.n)
@@ -213,8 +210,8 @@ class Plan:
         self.p = np.zeros((self.n, self.n, self.kmax))
 
         # same as above but changing shapes
-        self.d = [0] # dummy
-        self.q = [0] # dummy
+        self.d = [0]  # dummy
+        self.q = [0]  # dummy
 
         # Estimation matrices
         self.A = None
@@ -224,6 +221,7 @@ class Plan:
         self.C = None
         self.P = None
         self.L = None
+        self.M1 = None
 
         # Initialization flags
         self.motion_ready = False
@@ -275,6 +273,12 @@ class Plan:
         """
         if self.k == 0:
             assert self.is_initialized()
+            self.M1 = self.A - self.B.dot(self.K)
+            # Xk full
+            amb = self.a - self.b
+            center_offset = self.head + amb.dot(self.path[0])
+            cov_offset = amb.dot(self.P0.dot(amb.T))
+            self.Xk_full = Zonotope(center_offset, np.zeros(2), cov_offset)
         self.head = point
         lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
         self.rectangles_seen_now = lines_seen_now.keys()
@@ -283,7 +287,7 @@ class Plan:
         Pbar = (self.A.dot(self.P)).dot(self.A.T) + self.Q
         Rhat = PlanUtils.get_Rhat(self.R, w, conf_factor)
         self.L = (Pbar.dot(self.C.T)).dot(
-            np.linalg.inv((self.C.dot(Pbar)).dot(self.C.T)) + Rhat
+            np.linalg.inv((self.C.dot(Pbar)).dot(self.C.T) + Rhat)
         )
         self.P = Pbar - (self.L.dot(self.C)).dot(Pbar)
 
@@ -306,7 +310,6 @@ class Plan:
                     or np.intersect1d(missing, self.Sn[n]).size == 0
                 ):
                     self.Nu[n].set_values(self.Sn[n], self.Sn[self.k + 1])
-
         Nu_new = NuValues(self.Sn[self.k + 1], w, self.R, self._nlines_tot)
         self.Nu.append(Nu_new)
 
@@ -318,28 +321,25 @@ class Plan:
         - from k to k+1
         - assume L and C are already update by add_point
         """
-        M1 = self.A - self.B.dot(self.K)
         M2 = np.eye(self.n) - self.L.dot(self.C)
 
-        self.a = M1.dot(self.a)
-        self.b = M1.dot(self.b) - self.B.dot(self.K.dot(self.e))
+        self.a = self.M1.dot(self.a)
+        self.b = self.M1.dot(self.b) - self.B.dot(self.K.dot(self.e))
         self.e = M2.dot(self.A.dot(self.e))
 
         self.c[:, :, self.k] = np.eye(2)
         self.p[:, :, self.k] = -M2
 
         m = self.L.shape[1]
-        self.d.append(np.zeros((self.n, m, self.k + 1)))
+        self.d.append(np.zeros((self.n, m)))
         self.q.append(self.L)
 
         # n = 1 ... self.k-1
         for n in range(1, self.k):
-            self.c[:, :, n] = M1.dot(self.c[:, :, n]) - self.B.dot(
+            self.c[:, :, n] = self.M1.dot(self.c[:, :, n]) - self.B.dot(
                 self.K.dot(self.p[:, :, n])
             )
-            self.d[n] = M1.dot(self.d[n]) - self.B.dot(
-                self.K.dot(self.q[n])
-            )
+            self.d[n] = self.M1.dot(self.d[n]) - self.B.dot(self.K.dot(self.q[n]))
             self.p[:, :, n] = M2.dot(self.A.dot(self.p[:, :, n]))
             self.q[n] = M2.dot(self.A.dot(self.q[n]))
 
@@ -374,6 +374,7 @@ class Plan:
         """Return the probability of collision between the reachable set
         Xk and a Rectangle object.
         """
+        # print("here")
         return Xk.get_inter_prob(rectangle_zono, scaling_factors)
 
     def get_Xks(self):
@@ -388,20 +389,22 @@ class Plan:
 
         n_extr = len(self.Sn[-1])
         Xks = {}
-
-        for i in range(len(self.Nu)):
-            print(i)
-            for key, val in self.Nu[i]._values.items():
-                print(val.G.shape, end=' ')
-                print(val.G)
+        self.Xk_full = deepcopy(self.Nu_full[1])
+        self.Xk_full.scale(self.d[1])
+        for n in range(2, self.k + 1):
+            tmp = deepcopy(self.Nu_full[n])
+            tmp.scale(self.d[n])
+            self.Xk_full += tmp
+        self.Xk_full.c += center_offset
+        self.Xk_full.Sig += cov_offset
 
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
             Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[-1], configID))
-            Xks[configID].scale(self.d[:, :, 1])
+            Xks[configID].scale(self.d[1])
             for n in range(2, self.k + 1):
                 tmp = deepcopy(self.Nu[n].at_config(self.Sn[-1], configID))
-                tmp.scale(self.d[:, :, n])
+                tmp.scale(self.d[n])
                 Xks[configID] += tmp
             Xks[configID].c += center_offset
             Xks[configID].Sig += cov_offset

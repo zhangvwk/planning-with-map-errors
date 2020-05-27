@@ -1,6 +1,7 @@
 # Standard libraries
 import numpy as np
 import collections
+from copy import deepcopy
 
 # Custom libraries
 from plan import Plan
@@ -68,16 +69,18 @@ class Searcher:
         return False
 
     def remove_dominated(self):
+        print("----- Calling remove_dominated -----")
         for p in self.P_open:
-            for q in self.P:
-                if q.head != p.head:
+            for q_idx in self.P:
+                if q_idx != p.head_idx:
                     continue
                 else:
-                    lower_cost = q.cost < p.cost
-                    enclosed = q.zonotope_state <= p.zonotope_state
-                    if lower_cost and enclosed:
-                        self.P_open.remove(p)
-                        self.P.remove(p)
+                    for q in self.P[q_idx]:
+                        lower_cost = q.cost < p.cost
+                        enclosed = q.Xk_full <= p.Xk_full
+                        if lower_cost and enclosed:
+                            self.P_open.remove(p)
+                            self.P.remove(p)
 
     def prune(self, i):
         for p in self.P_open:
@@ -95,7 +98,7 @@ class Searcher:
             ):
                 P_candidates.update(self.P[head_idx])
 
-    def explore(self, prob_threshold, scaling_factors=[3, 2, 1]):
+    def explore(self, prob_threshold=0.1, scaling_factors=[6, 5, 4, 3, 2, 1]):
         if self.x_init is None:
             print("Please set the source node using .set_source(x_init)")
             raise
@@ -110,12 +113,18 @@ class Searcher:
         self.prob_threshold = prob_threshold
         i = 0
         while self.P_open and not self.reached_goal():
+            print("P_open = {}".format(self.P_open))
             for p in self.G:
-                print("========== p = {} ====".format(self.graph.samples[p.head_idx]))
+                print(
+                    "========== p = {} ==========".format(
+                        self.graph.samples[p.head_idx]
+                    )
+                )
                 for k, v in self.graph.edges[p.head_idx].items():
                     discard = False
                     neighbor_idx = k
                     to_neighbor_cost, to_neighbor_path = v
+                    print("----- neighbor_idx = {} -----".format(neighbor_idx))
                     for sub_neighbor in to_neighbor_path[1:]:
                         print("== sub-neighbor = {} ==".format(sub_neighbor))
                         p.add_point(self.graph.env, sub_neighbor)
@@ -124,13 +133,21 @@ class Searcher:
                         )
                         print("prob_collision = {}".format(prob_collision))
                         if self.collision(prob_collision):
-                            break
+                            print("collided!")
                             discard = True
+                            break
                     if discard:
+                        print("discarded")
                         continue
+                    print("adding to P and P_open")
                     p.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
+                    q = p
+                    print("P = {}".format(self.P))
+                    print("P_open = {}".format(self.P_open))
                     self.P[neighbor_idx].add(p)
-                    self.P_open.add(p)
+                    self.P_open.add(q)
+                    print("P = {}".format(self.P))
+                    print("P_open = {}".format(self.P_open))
             self.remove_dominated()
             self.P_open -= self.G
             i += 1
