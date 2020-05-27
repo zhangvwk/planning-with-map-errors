@@ -201,7 +201,7 @@ class Polygon:
         p.plot_edge(min_proj)
 
 
-CONFIG2BIT = {"worst": bitarray("1111"), "best": bitarray("0000")}
+CONFIG2BIT = {"worst": frozenbitarray("1111"), "best": frozenbitarray("0000")}
 BIT2CONFIG = {frozenbitarray("1111"): "worst", frozenbitarray("0000"): "best"}
 
 
@@ -306,7 +306,7 @@ class Rectangle(Polygon):
                 elif config == "actual":
                     w = self.actual_errors[edge_idx]
                 else:
-                    if not isinstance(config, bitarray):
+                    if not isinstance(config, frozenbitarray):
                         config = CONFIG2BIT[config]
                     w = self.error_bounds[edge_idx, int(config[edge_idx])]
                 vertices_config[edge_idx] += w * v

@@ -95,7 +95,7 @@ class Searcher:
             ):
                 P_candidates.update(self.P[head_idx])
 
-    def explore(self, prob_threshold):
+    def explore(self, prob_threshold, scaling_factors=[3, 2, 1]):
         if self.x_init is None:
             print("Please set the source node using .set_source(x_init)")
             raise
@@ -111,14 +111,18 @@ class Searcher:
         i = 0
         while self.P_open and not self.reached_goal():
             for p in self.G:
-                # print("==== Outer for p = {} ====".format(p.))
+                print("========== p = {} ====".format(self.graph.samples[p.head_idx]))
                 for k, v in self.graph.edges[p.head_idx].items():
                     discard = False
                     neighbor_idx = k
                     to_neighbor_cost, to_neighbor_path = v
+                    print("to_neighbor_path = {}".format(to_neighbor_path))
                     for sub_neighbor in to_neighbor_path:
+                        print("== sub-neighbor = {} ==".format(sub_neighbor))
                         p.add_point(self.graph.env, sub_neighbor)
-                        prob_collision = p.get_max_prob_collision(self.graph.env)
+                        prob_collision = p.get_max_prob_collision(
+                            self.graph.env, scaling_factors
+                        )
                         if self.collision(prob_collision):
                             break
                             discard = True

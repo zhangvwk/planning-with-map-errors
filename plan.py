@@ -291,6 +291,7 @@ class Plan:
         self.update_coeffs()
 
     def update_Nu(self, env, lines, w):
+        print("========== k = {}".format(self.k))
         self.Sn.append(lines)
         prev_lines = self.Sn[self.k]  # self.k not updated yet
         same = np.intersect1d(lines, prev_lines)
@@ -305,7 +306,7 @@ class Plan:
                     or np.intersect1d(missing, self.Sn[n]).size == 0
                 ):
                     self.Nu[n].set_values(self.Sn[n], self.Sn[self.k + 1])
-
+        print("self.Sn[self.k + 1] = {}".format(self.Sn[self.k + 1]))
         Nu_new = NuValues(self.Sn[self.k + 1], w, self.R, self._nlines_tot)
         self.Nu.append(Nu_new)
         self.Nu_full.append(Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0])))
@@ -327,8 +328,8 @@ class Plan:
         self.p[:, :, self.k] = -M2
 
         m = self.L.shape[1]
-        d_next = np.zeros((self.n, m, self.k+1))
-        q_next = np.zeros((self.n, m, self.k+1))
+        d_next = np.zeros((self.n, m, self.k + 1))
+        q_next = np.zeros((self.n, m, self.k + 1))
         q_next[:, :, self.k] = self.L
 
         # n = 1 ... self.k-1
@@ -345,7 +346,7 @@ class Plan:
         self.d = d_next
         self.q = q_next
 
-    def get_max_prob_collision(self, env):
+    def get_max_prob_collision(self, env, scaling_factors):
         """
         - called after add_point and update
         - now we have everything to compute all possible X(k+1)
@@ -355,23 +356,28 @@ class Plan:
         Xks = self.get_Xks()
         p = 0.0
         for configID in range(2 ** n_extr):
-            bconfig = self.configID2bitarray(configID, self.Sn[-1], self._nlines_tot)
+            bconfig = PlanUtils.configID2bitarray(
+                configID, self.Sn[-1], self._nlines_tot
+            )
             for rectangle_idx in self.rectangles_seen_now:
                 config = bconfig[rectangle_idx * 4 : (rectangle_idx + 1) * 4]
                 p = max(
                     p,
                     self.get_prob_collision(
                         Xks[configID],
-                        env.rectangles[rectangle_idx].to_zonotope(config),
+                        env.rectangles[rectangle_idx].to_zonotope(
+                            frozenbitarray(config)
+                        ),
+                        scaling_factors,
                     ),
                 )
         return p
 
-    def get_prob_collision(self, Xk, rectangle_zono):
+    def get_prob_collision(self, Xk, rectangle_zono, scaling_factors):
         """Return the probability of collision between the reachable set
         Xk and a Rectangle object.
         """
-        return Xk.get_inter_prob(rectangle_zono)
+        return Xk.get_inter_prob(rectangle_zono, scaling_factors)
 
     def get_Xks(self):
         """Return a dictionary of format:
@@ -385,6 +391,7 @@ class Plan:
 
         n_extr = len(self.Sn[-1])
         Xks = {}
+        print("len.Nu = {}".format(len(self.Nu)))
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
             Xks[configID] = self.Nu[1].at_config(self.Sn[-1], configID)

@@ -126,6 +126,7 @@ class Zonotope:
         """
         n = self.G.shape[0]
         assert n == 2  # what follows is only valid in 2D
+        scaling_factors = np.array(scaling_factors)
         k = scaling_factors.shape[0]
         X = X.to_poly()
 
