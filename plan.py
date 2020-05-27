@@ -230,7 +230,7 @@ class Plan:
 
     def initialize_Nu(self, start_point, env):
         lines_seen_now = PlanUtils.get_lines_seen_now(env, start_point)
-        self.rectangles_seen_now = lines_seen_now.keys()
+        self.rectangles_seen_now = list(lines_seen_now.keys())
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         _, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
         self.Sn = [line_indices]
@@ -281,7 +281,7 @@ class Plan:
             self.Xk_full = Zonotope(center_offset, np.zeros(2), cov_offset)
         self.head = point
         lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
-        self.rectangles_seen_now = lines_seen_now.keys()
+        self.rectangles_seen_now = list(lines_seen_now.keys())
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         self.C, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
         Pbar = (self.A.dot(self.P)).dot(self.A.T) + self.Q
