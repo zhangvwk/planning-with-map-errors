@@ -213,8 +213,8 @@ class Plan:
         self.p = np.zeros((self.n, self.n, self.kmax))
 
         # same as above but changing shapes
-        self.d = None
-        self.q = None
+        self.d = [0] # dummy
+        self.q = [0] # dummy
 
         # Estimation matrices
         self.A = None
@@ -329,23 +329,19 @@ class Plan:
         self.p[:, :, self.k] = -M2
 
         m = self.L.shape[1]
-        d_next = np.zeros((self.n, m, self.k + 1))
-        q_next = np.zeros((self.n, m, self.k + 1))
-        q_next[:, :, self.k] = self.L
+        self.d.append(np.zeros((self.n, m, self.k + 1)))
+        self.q.append(self.L)
 
         # n = 1 ... self.k-1
         for n in range(1, self.k):
             self.c[:, :, n] = M1.dot(self.c[:, :, n]) - self.B.dot(
                 self.K.dot(self.p[:, :, n])
             )
-            d_next[:, :, n] = M1.dot(self.d[:, :, n]) - self.B.dot(
-                self.K.dot(self.q[:, :, n])
+            self.d[n] = M1.dot(self.d[n]) - self.B.dot(
+                self.K.dot(self.q[n])
             )
             self.p[:, :, n] = M2.dot(self.A.dot(self.p[:, :, n]))
-            q_next[:, :, n] = M2.dot(self.A.dot(self.q[:, :, n]))
-
-        self.d = d_next
-        self.q = q_next
+            self.q[n] = M2.dot(self.A.dot(self.q[n]))
 
     def get_max_prob_collision(self, env, scaling_factors):
         """
