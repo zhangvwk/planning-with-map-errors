@@ -191,7 +191,9 @@ class Plan:
 
         self.R = R  # 1D distance measurement variance
         self.n = n
-        self.kmax = kmax
+        # will consider at most kmax+1 values in ranges
+        # for instance, 0,...,kmax, both ends included
+        self.kmax = kmax 
         self.k = 0
         self._nlines_tot = env.nlines_tot
 
@@ -205,13 +207,15 @@ class Plan:
         self.e = np.eye(self.n)
 
         # Coefficients that require the entire history whose shape does not change
-        self.c = np.zeros((self.n, self.n, self.kmax))
+        self.c = np.zeros((self.n, self.n, self.kmax+1))
         self.c[:, :, 0] = np.eye(2)
-        self.p = np.zeros((self.n, self.n, self.kmax))
+        self.p = np.zeros((self.n, self.n, self.kmax+1))
 
         # same as above but changing shapes
-        self.d = [0]  # dummy
-        self.q = [0]  # dummy
+        self.d = [None] * (self.kmax+1)
+        self.q = [None] * (self.kmax+1)
+        self.d[0] = 0  # dummy
+        self.q[0] = 0  # dummy
 
         # Estimation matrices
         self.A = None
@@ -235,10 +239,12 @@ class Plan:
         _, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
         self.Sn = [line_indices]
         Nu_new = NuValues(self.Sn[0], w, self.R, self._nlines_tot)
-        self.Nu = [Nu_new]
+        self.Nu = [None] * (self.kmax+1)
+        self.Nu[0] = Nu_new
 
         # initialize Nu_full
-        self.Nu_full = [Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))]
+        self.Nu_full = [None] * (self.kmax+1)
+        self.Nu_full[0] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
 
     def set_motion(self, A, B, Q):
         self.A = A
@@ -304,16 +310,17 @@ class Plan:
 
         # if S(k) = S(k+1), no need to update anything
         if additional.size > 0 or missing.size > 0:
-            for n in range(self.k + 1):
+            for n1 in range(max(0,self.k-self.kmax), self.k + 1):
+                n = n1 % (self.kmax+1)
                 if (
                     np.intersect1d(additional, self.Sn[n]).size == 0
                     or np.intersect1d(missing, self.Sn[n]).size == 0
                 ):
                     self.Nu[n].set_values(self.Sn[n], self.Sn[self.k + 1])
-        Nu_new = NuValues(self.Sn[self.k + 1], w, self.R, self._nlines_tot)
-        self.Nu.append(Nu_new)
 
-        self.Nu_full.append(Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0])))
+        Nu_new = NuValues(self.Sn[self.k + 1], w, self.R, self._nlines_tot)
+        self.Nu[self.k+1] = Nu_new
+        self.Nu_full[self.k+1] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
         self.k += 1
 
     def update_coeffs(self):
@@ -331,11 +338,12 @@ class Plan:
         self.p[:, :, self.k] = -M2
 
         m = self.L.shape[1]
-        self.d.append(np.zeros((self.n, m)))
-        self.q.append(self.L)
+        self.d[self.k%(self.kmax+1)] = np.zeros((self.n, m))
+        self.q[self.k%(self.kmax+1)] = self.L
 
         # n = 1 ... self.k-1
-        for n in range(1, self.k):
+        for n1 in range(max(1,self.k+1-self.kmax), self.k):
+            n = n1 % (self.kmax+1)
             self.c[:, :, n] = self.M1.dot(self.c[:, :, n]) - self.B.dot(
                 self.K.dot(self.p[:, :, n])
             )
@@ -383,14 +391,16 @@ class Plan:
         amb = self.a - self.b
         center_offset = self.head + amb.dot(self.path[0])
         cov_offset = amb.dot(self.P0.dot(amb.T))
-        for n in range(1, self.k + 1):
+        for n1 in range(max(1,self.k+1-self.kmax), self.k + 1):
+            n = n1 % (self.k+1)
             cov_offset += self.c[:, :, n].dot(self.Q.dot(self.c[:, :, n].T))
 
         n_extr = len(self.Sn[-1])
         Xks = {}
         self.Xk_full = deepcopy(self.Nu_full[1])
         self.Xk_full.scale(self.d[1])
-        for n in range(2, self.k + 1):
+        for n1 in range(max(2,self.k+2-self.kmax), self.k + 1):
+            n = n1 % (self.k+1)
             tmp = deepcopy(self.Nu_full[n])
             tmp.scale(self.d[n])
             self.Xk_full += tmp
@@ -401,7 +411,8 @@ class Plan:
             # trick because I don't have a zero zonotope
             Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[-1], configID))
             Xks[configID].scale(self.d[1])
-            for n in range(2, self.k + 1):
+            for n1 in range(max(2,self.k+2-self.kmax), self.k + 1):
+                n = n1 % (self.k+1)
                 tmp = deepcopy(self.Nu[n].at_config(self.Sn[-1], configID))
                 tmp.scale(self.d[n])
                 Xks[configID] += tmp
