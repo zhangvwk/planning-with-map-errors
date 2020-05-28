@@ -237,12 +237,14 @@ class Plan:
         self.rectangles_seen_now = list(lines_seen_now.keys())
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         _, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
-        self.Sn = [line_indices]
+
+        self.Sn = [None] * (self.kmax+1)
+        self.Sn[0] = line_indices
+
         Nu_new = NuValues(self.Sn[0], w, self.R, self._nlines_tot)
         self.Nu = [None] * (self.kmax+1)
         self.Nu[0] = Nu_new
 
-        # initialize Nu_full
         self.Nu_full = [None] * (self.kmax+1)
         self.Nu_full[0] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
 
@@ -301,12 +303,17 @@ class Plan:
         self.update_coeffs()
 
     def update_Nu(self, env, lines, w):
+        # self.k not updated yet
+        kprev = self.k % (self.kmax+1)
+        know = (self.k+1) % (self.kmax+1)
+
         # print("========== k = {}".format(self.k))
-        self.Sn.append(lines)
-        prev_lines = self.Sn[self.k]  # self.k not updated yet
+        self.Sn[know] = lines
+        prev_lines = self.Sn[kprev]  # self.k not updated yet
         same = np.intersect1d(lines, prev_lines)
         additional = np.setdiff1d(lines, same)
         missing = np.setdiff1d(prev_lines, same)
+
 
         # if S(k) = S(k+1), no need to update anything
         if additional.size > 0 or missing.size > 0:
@@ -316,11 +323,11 @@ class Plan:
                     np.intersect1d(additional, self.Sn[n]).size == 0
                     or np.intersect1d(missing, self.Sn[n]).size == 0
                 ):
-                    self.Nu[n].set_values(self.Sn[n], self.Sn[self.k + 1])
+                    self.Nu[n].set_values(self.Sn[n], self.Sn[know])
 
-        Nu_new = NuValues(self.Sn[self.k + 1], w, self.R, self._nlines_tot)
-        self.Nu[self.k+1] = Nu_new
-        self.Nu_full[self.k+1] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
+        Nu_new = NuValues(self.Sn[know], w, self.R, self._nlines_tot)
+        self.Nu[know % (self.kmax+1)] = Nu_new
+        self.Nu_full[know % (self.kmax+1)] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
         self.k += 1
 
     def update_coeffs(self):
@@ -334,8 +341,8 @@ class Plan:
         self.b = self.M1.dot(self.b) - self.B.dot(self.K.dot(self.e))
         self.e = M2.dot(self.A.dot(self.e))
 
-        self.c[:, :, self.k] = np.eye(2)
-        self.p[:, :, self.k] = -M2
+        self.c[:, :, self.k % (self.kmax+1)] = np.eye(2)
+        self.p[:, :, self.k % (self.kmax+1)] = -M2
 
         m = self.L.shape[1]
         self.d[self.k%(self.kmax+1)] = np.zeros((self.n, m))
@@ -357,12 +364,13 @@ class Plan:
         - now we have everything to compute all possible X(k+1)
           and intersect those with the associated environment
         """
-        n_extr = len(self.Sn[-1])
+        know = self.k % (self.kmax+1)
+        n_extr = len(self.Sn[know])
         Xks = self.get_Xks()
         p = 0.0
         for configID in range(2 ** n_extr):
             bconfig = PlanUtils.configID2bitarray(
-                configID, self.Sn[-1], self._nlines_tot
+                configID, self.Sn[know], self._nlines_tot
             )
             for rectangle_idx in self.rectangles_seen_now:
                 config = bconfig[rectangle_idx * 4 : (rectangle_idx + 1) * 4]
@@ -392,15 +400,16 @@ class Plan:
         center_offset = self.head + amb.dot(self.path[0])
         cov_offset = amb.dot(self.P0.dot(amb.T))
         for n1 in range(max(1,self.k+1-self.kmax), self.k + 1):
-            n = n1 % (self.k+1)
+            n = n1 % (self.kmax+1)
             cov_offset += self.c[:, :, n].dot(self.Q.dot(self.c[:, :, n].T))
 
-        n_extr = len(self.Sn[-1])
+        know = self.k % (self.kmax+1)
+        n_extr = len(self.Sn[know])
         Xks = {}
         self.Xk_full = deepcopy(self.Nu_full[1])
         self.Xk_full.scale(self.d[1])
         for n1 in range(max(2,self.k+2-self.kmax), self.k + 1):
-            n = n1 % (self.k+1)
+            n = n1 % (self.kmax+1)
             tmp = deepcopy(self.Nu_full[n])
             tmp.scale(self.d[n])
             self.Xk_full += tmp
@@ -409,11 +418,11 @@ class Plan:
 
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
-            Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[-1], configID))
+            Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[know], configID))
             Xks[configID].scale(self.d[1])
             for n1 in range(max(2,self.k+2-self.kmax), self.k + 1):
-                n = n1 % (self.k+1)
-                tmp = deepcopy(self.Nu[n].at_config(self.Sn[-1], configID))
+                n = n1 % (self.kmax+1)
+                tmp = deepcopy(self.Nu[n].at_config(self.Sn[know], configID))
                 tmp.scale(self.d[n])
                 Xks[configID] += tmp
             Xks[configID].c += center_offset
