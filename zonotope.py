@@ -31,9 +31,14 @@ class Zonotope:
 
     def __le__(self, other):
         """Return True if self is enclosed by other."""
-        p_self = self.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_poly()
-        p_other = other.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_poly()
-        return p_self <= p_other
+        XY = pc.extreme(self.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_poly())
+        A, b = other.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_H()
+        n_points = XY.shape[0]
+        ineq = A.dot(XY.T)
+        for i in range(n_points):
+            if not np.all(ineq[:,i]<b):
+                return False
+        return True
 
     def __str__(self):
         return "({}, {})".format(self.c, self.G)
