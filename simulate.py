@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 
 # Custom libraries
+from utils import PlotTools
 from plan import PlanUtils
 from shapes import Point
 
@@ -132,11 +133,7 @@ class Simulator:
         prob_collision = float(num_collisions / iters)
         return xs, x_ests, x_bars, prob_collision
 
-    def plot_traj(self, x, linestyle="-", color="r"):
-        x_list, y_list = map(list, zip(*[(state[0], state[1]) for state in x]))
-        plt.plot(x_list, y_list, linestyle=linestyle, color=color)
-
     def plot_trajs(self, xs, x_noms):
         for i in xs:
             self.plot_traj(xs[i])
-        self.plot_traj(x_noms, linestyle="--", color="k")
+        PlotTools.plot_traj(x_noms, linestyle="--", color="k")

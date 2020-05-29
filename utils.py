@@ -142,3 +142,8 @@ class PlotTools:
         plt.figure(figsize=(10, 10))
         for polygon in polygons:
             polygon.plot_min_proj(p)
+
+    @staticmethod
+    def plot_traj(x, linestyle="-", color="r"):
+        x_list, y_list = map(list, zip(*[(state[0], state[1]) for state in x]))
+        plt.plot(x_list, y_list, linestyle=linestyle, color=color)
