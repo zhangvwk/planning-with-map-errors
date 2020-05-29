@@ -25,7 +25,6 @@ class Searcher:
         self.x_init = self.graph.samples[start_idx, :]
 
     def initialize_open(self, Q, R, P0, kmax):
-        # print("[INFO] Calling initialize_open")
         self.clear()
         self.plan_number = 0
         p_init = Plan(
@@ -39,8 +38,6 @@ class Searcher:
         self.P[0] = set()
         self.P[0].add(deepcopy(p_init))
         self.G = self.P_open.copy()
-        # print("P = {}".format(self.P))
-        # print("P_open = {}".format(self.P_open))
 
     def clear(self):
         self.P_open = set()
@@ -86,18 +83,18 @@ class Searcher:
         # print("P_open before = {}".format(self.P_open))
         # print("P before = {}".format(self.P))
         for p, plan_number in self.P_open:
-            for q_idx in self.P:
-                if q_idx != p.head_idx:
-                    continue
-                else:
-                    for q in self.P[q_idx]:
-                        lower_cost = q.cost < p.cost
-                        enclosed = q.Xk_full <= p.Xk_full
-                        if lower_cost and enclosed:
-                            self.P_open.remove((p, plan_number))
-                            self.P.remove(p)
+            if p.head_idx in self.P:
+                for q in self.P[p.head_idx]:
+                    lower_cost = q.cost < p.cost
+                    enclosed = q.Xk_full <= p.Xk_full
+                    if lower_cost and enclosed:
+                        self.P_open.remove((p, plan_number))
+                        self.P.remove(p)
         # print("P_open after = {}".format(self.P_open))
         # print("P after = {}".format(self.P))
+        # print(
+        #     "==========================================================================="
+        # )
 
     def prune(self, i):
         # print(
@@ -111,6 +108,9 @@ class Searcher:
             if p.cost <= i * self.pruning_coeff:
                 self.G.add((p, plan_number))
         # print("G after = {}".format(self.G))
+        # print(
+        #     "==========================================================================="
+        # )
 
     def collision(self, prob_collision):
         return self.prob_threshold <= prob_collision
@@ -122,6 +122,7 @@ class Searcher:
                 Point(self.graph.samples[head_idx][0], self.graph.samples[head_idx][1])
             ):
                 P_candidates.update(self.P[head_idx])
+        return P_candidates
 
     def explore(self, prob_threshold=0.1, scaling_factors=[6, 5, 4, 3, 2, 1]):
         if self.x_init is None:
@@ -140,48 +141,42 @@ class Searcher:
         while self.P_open and not self.reached_goal():
             # print("P_open = {}".format(self.P_open))
             # print("G = {}".format(self.G))
-            list_G = list(self.G)
-            for p, plan_number in list_G:
+            for p, plan_number in self.G:
                 print(
                     "========== p = {} at index {} ==========".format(
                         self.graph.samples[p.head_idx], p.head_idx
                     )
                 )
+                print("NEIGHBORS: {}".format(self.graph.edges[p.head_idx].keys()))
                 for k, v in self.graph.edges[p.head_idx].items():
                     discard = False
-                    # print("k = {}".format(k))
-                    # print("v = {}".format(v))
                     neighbor_idx = k
                     to_neighbor_cost, to_neighbor_path = v
-                    # print("----- neighbor_idx = {} -----".format(neighbor_idx))
+                    print("----- neighbor_idx = {} -----".format(neighbor_idx))
+                    p_copy = deepcopy(p)
                     for sub_neighbor in to_neighbor_path[1:]:
                         # print("== sub-neighbor = {} ==".format(sub_neighbor))
-                        p.add_point(self.graph.env, sub_neighbor)
-                        prob_collision = p.get_max_prob_collision(
+                        p_copy.add_point(self.graph.env, sub_neighbor)
+                        prob_collision = p_copy.get_max_prob_collision(
                             self.graph.env, scaling_factors
                         )
-                        # print("prob_collision = {}".format(prob_collision))
                         if self.collision(prob_collision):
                             # print("prob_collision = {}".format(prob_collision))
-                            # print("collided!")
+                            print("collided!")
                             discard = True
                             break
                     if discard:
-                        # print("discarded")
+                        print("discarded")
                         continue
-                    # print("adding to P and P_open")
-                    p.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
+                    print("adding to P and P_open")
+                    p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
                     self.plan_number += 1
-                    q = deepcopy(p)
-                    self.P[neighbor_idx].add(q)
-                    self.P_open.add((q, self.plan_number))
+                    self.P[neighbor_idx].add(p_copy)
+                    self.P_open.add((p_copy, self.plan_number))
                     # print("P = {}".format(self.P))
                     # print("P_open = {}".format(self.P_open))
             self.remove_dominated()
-            # print("removing G from P_open")
             self.P_open -= self.G
-            # print("P_open = {}".format(self.P_open))
-            # print("G = {}".format(self.G))
             i += 1
             self.prune(i)
         P_candidates = self.get_candidates()
@@ -189,4 +184,92 @@ class Searcher:
         if not P_candidates:
             print("Could not find a path.")
             return None
-        return min(P_candidates, key=lambda plan: plan.cost)
+        return P_candidates, min(P_candidates, key=lambda plan: plan.cost)
+
+    # def explore(self, prob_threshold=0.1, scaling_factors=[6, 5, 4, 3, 2, 1]):
+    #     if self.x_init is None:
+    #         print("Please set the source node using .set_source(x_init)")
+    #         raise
+    #     if len(self.P_open) == 0:
+    #         print("Please initialize the searcher using .initialize_open(R, kmax).")
+    #         raise
+    #     try:
+    #         assert self.is_valid_goal()
+    #     except AssertionError:
+    #         print("Invalid goal region.")
+    #         raise
+    #     self.prob_threshold = prob_threshold
+    #     i = 0
+    #     while self.P_open and not self.reached_goal():
+    #         # print("P_open = {}".format(self.P_open))
+    #         # print("G = {}".format(self.G))
+    #         for p, plan_number in self.G:
+    #             print(
+    #                 "========== p = {} at index {} ==========".format(
+    #                     self.graph.samples[p.head_idx], p.head_idx
+    #                 )
+    #             )
+    #             print("NEIGHBORS: {}".format(self.graph.edges[p.head_idx].keys()))
+    #             for k, v in self.graph.edges[p.head_idx].items():
+    #                 discard = False
+    #                 neighbor_idx = k
+    #                 to_neighbor_cost, to_neighbor_path = v
+    #                 print("----- neighbor_idx = {} -----".format(neighbor_idx))
+    #                 p_copy = deepcopy(p)
+    #                 for sub_neighbor in to_neighbor_path[1:]:
+    #                     # print("== sub-neighbor = {} ==".format(sub_neighbor))
+    #                     p_copy.add_point(self.graph.env, sub_neighbor)
+    #                     prob_collision = p_copy.get_max_prob_collision(
+    #                         self.graph.env, scaling_factors
+    #                     )
+    #                     if self.collision(prob_collision):
+    #                         # print("prob_collision = {}".format(prob_collision))
+    #                         print("collided!")
+    #                         discard = True
+    #                         break
+    #                 if discard:
+    #                     print("discarded")
+    #                     continue
+    #                 print("adding to P and P_open")
+    #                 p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
+    #                 self.plan_number += 1
+    #                 self.P[neighbor_idx].add(p_copy)
+    #                 self.P_open.add((p_copy, self.plan_number))
+    #                 # print("P = {}".format(self.P))
+    #                 # print("P_open = {}".format(self.P_open))
+    #         self.remove_dominated()
+    #         self.P_open -= self.G
+    #         i += 1
+    #         self.prune(i)
+    #     P_candidates = self.get_candidates()
+    #     print("P_candidates = {}".format(P_candidates))
+    #     if not P_candidates:
+    #         print("Could not find a path.")
+    #         return None
+    #     return P_candidates, min(P_candidates, key=lambda plan: plan.cost)
+
+    # def traverse_neighbor(self, p):
+    #     discard = False
+    #     neighbor_idx = k
+    #     to_neighbor_cost, to_neighbor_path = v
+    #     print("----- neighbor_idx = {} -----".format(neighbor_idx))
+    #     p_copy = deepcopy(p)
+    #     for sub_neighbor in to_neighbor_path[1:]:
+    #         # print("== sub-neighbor = {} ==".format(sub_neighbor))
+    #         p_copy.add_point(self.graph.env, sub_neighbor)
+    #         prob_collision = p_copy.get_max_prob_collision(
+    #             self.graph.env, scaling_factors
+    #         )
+    #         if self.collision(prob_collision):
+    #             # print("prob_collision = {}".format(prob_collision))
+    #             print("collided!")
+    #             discard = True
+    #             break
+    #     if discard:
+    #         print("discarded")
+    #         continue
+    #     print("adding to P and P_open")
+    #     p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
+    #     self.plan_number += 1
+    #     self.P[neighbor_idx].add(p_copy)
+    #     self.P_open.add((p_copy, self.plan_number))
