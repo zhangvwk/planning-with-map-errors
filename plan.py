@@ -185,7 +185,8 @@ class NuValues:
 class Plan:
     def __init__(self, start_point, start_idx, env, n, R=0.1, kmax=100):
         self.head = start_point
-        self.path = [start_point]
+        self.start_point = start_point
+        self.path_indices = [start_idx]
         self.cost = 0
         self.head_idx = start_idx
 
@@ -193,7 +194,7 @@ class Plan:
         self.n = n
         # will consider at most kmax+1 values in ranges
         # for instance, 0,...,kmax, both ends included
-        self.kmax = kmax 
+        self.kmax = kmax
         self.k = 0
         self._nlines_tot = env.nlines_tot
 
@@ -207,13 +208,13 @@ class Plan:
         self.e = np.eye(self.n)
 
         # Coefficients that require the entire history whose shape does not change
-        self.c = np.zeros((self.n, self.n, self.kmax+1))
+        self.c = np.zeros((self.n, self.n, self.kmax + 1))
         self.c[:, :, 0] = np.eye(2)
-        self.p = np.zeros((self.n, self.n, self.kmax+1))
+        self.p = np.zeros((self.n, self.n, self.kmax + 1))
 
         # same as above but changing shapes
-        self.d = [None] * (self.kmax+1)
-        self.q = [None] * (self.kmax+1)
+        self.d = [None] * (self.kmax + 1)
+        self.q = [None] * (self.kmax + 1)
         self.d[0] = 0  # dummy
         self.q[0] = 0  # dummy
 
@@ -238,14 +239,14 @@ class Plan:
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         _, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
 
-        self.Sn = [None] * (self.kmax+1)
+        self.Sn = [None] * (self.kmax + 1)
         self.Sn[0] = line_indices
 
         Nu_new = NuValues(self.Sn[0], w, self.R, self._nlines_tot)
-        self.Nu = [None] * (self.kmax+1)
+        self.Nu = [None] * (self.kmax + 1)
         self.Nu[0] = Nu_new
 
-        self.Nu_full = [None] * (self.kmax+1)
+        self.Nu_full = [None] * (self.kmax + 1)
         self.Nu_full[0] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
 
     def set_motion(self, A, B, Q):
@@ -262,6 +263,11 @@ class Plan:
         self.P0 = P0
         self.P = P0
         self.est_ready = True
+        # Xk full
+        amb = self.a - self.b
+        center_offset = self.head + amb.dot(self.start_point)
+        cov_offset = amb.dot(self.P0.dot(amb.T))
+        self.Xk_full = Zonotope(center_offset, np.zeros(2), cov_offset)
 
     def is_initialized(self):
         return self.motion_ready and self.gain_ready and self.est_ready
@@ -269,7 +275,7 @@ class Plan:
     def update_info(self, head_idx, cost_to_add, path_to_add):
         self.head_idx = head_idx
         self.cost += cost_to_add
-        self.path_to_add = np.vstack((self.path, path_to_add))
+        self.path_indices.append(head_idx)
 
     def add_point(self, env, point, conf_factor=0.5):
         """
@@ -282,11 +288,6 @@ class Plan:
         if self.k == 0:
             assert self.is_initialized()
             self.M1 = self.A - self.B.dot(self.K)
-            # Xk full
-            amb = self.a - self.b
-            center_offset = self.head + amb.dot(self.path[0])
-            cov_offset = amb.dot(self.P0.dot(amb.T))
-            self.Xk_full = Zonotope(center_offset, np.zeros(2), cov_offset)
         self.head = point
         lines_seen_now = PlanUtils.get_lines_seen_now(env, point)
         self.rectangles_seen_now = list(lines_seen_now.keys())
@@ -304,8 +305,8 @@ class Plan:
 
     def update_Nu(self, env, lines, w):
         # self.k not updated yet
-        kprev = self.k % (self.kmax+1)
-        know = (self.k+1) % (self.kmax+1)
+        kprev = self.k % (self.kmax + 1)
+        know = (self.k + 1) % (self.kmax + 1)
 
         # print("========== k = {}".format(self.k))
         prev_lines = self.Sn[kprev]  # self.k not updated yet
@@ -313,11 +314,10 @@ class Plan:
         additional = np.setdiff1d(lines, same)
         missing = np.setdiff1d(prev_lines, same)
 
-
         # if S(k) = S(k+1), no need to update anything
         if additional.size > 0 or missing.size > 0:
-            for n1 in range(max(0,self.k-self.kmax), self.k + 1):
-                n = n1 % (self.kmax+1)
+            for n1 in range(max(0, self.k - self.kmax), self.k + 1):
+                n = n1 % (self.kmax + 1)
                 if (
                     np.intersect1d(additional, self.Sn[n]).size == 0
                     or np.intersect1d(missing, self.Sn[n]).size == 0
@@ -341,16 +341,16 @@ class Plan:
         self.b = self.M1.dot(self.b) - self.B.dot(self.K.dot(self.e))
         self.e = M2.dot(self.A.dot(self.e))
 
-        self.c[:, :, self.k % (self.kmax+1)] = np.eye(2)
-        self.p[:, :, self.k % (self.kmax+1)] = -M2
+        self.c[:, :, self.k % (self.kmax + 1)] = np.eye(2)
+        self.p[:, :, self.k % (self.kmax + 1)] = -M2
 
         m = self.L.shape[1]
-        self.d[self.k%(self.kmax+1)] = np.zeros((self.n, m))
-        self.q[self.k%(self.kmax+1)] = self.L
+        self.d[self.k % (self.kmax + 1)] = np.zeros((self.n, m))
+        self.q[self.k % (self.kmax + 1)] = self.L
 
         # n = 1 ... self.k-1
-        for n1 in range(max(1,self.k+1-self.kmax), self.k):
-            n = n1 % (self.kmax+1)
+        for n1 in range(max(1, self.k + 1 - self.kmax), self.k):
+            n = n1 % (self.kmax + 1)
             self.c[:, :, n] = self.M1.dot(self.c[:, :, n]) - self.B.dot(
                 self.K.dot(self.p[:, :, n])
             )
@@ -364,7 +364,7 @@ class Plan:
         - now we have everything to compute all possible X(k+1)
           and intersect those with the associated environment
         """
-        know = self.k % (self.kmax+1)
+        know = self.k % (self.kmax + 1)
         n_extr = len(self.Sn[know])
         Xks = self.get_Xks()
         p = 0.0
@@ -397,19 +397,19 @@ class Plan:
         {configId -> corresponding reachable set Xk}
         """
         amb = self.a - self.b
-        center_offset = self.head + amb.dot(self.path[0])
+        center_offset = self.head + amb.dot(self.start_point)
         cov_offset = amb.dot(self.P0.dot(amb.T))
-        for n1 in range(max(1,self.k+1-self.kmax), self.k + 1):
-            n = n1 % (self.kmax+1)
+        for n1 in range(max(1, self.k + 1 - self.kmax), self.k + 1):
+            n = n1 % (self.kmax + 1)
             cov_offset += self.c[:, :, n].dot(self.Q.dot(self.c[:, :, n].T))
 
-        know = self.k % (self.kmax+1)
+        know = self.k % (self.kmax + 1)
         n_extr = len(self.Sn[know])
         Xks = {}
         self.Xk_full = deepcopy(self.Nu_full[1])
         self.Xk_full.scale(self.d[1])
-        for n1 in range(max(2,self.k+2-self.kmax), self.k + 1):
-            n = n1 % (self.kmax+1)
+        for n1 in range(max(2, self.k + 2 - self.kmax), self.k + 1):
+            n = n1 % (self.kmax + 1)
             tmp = deepcopy(self.Nu_full[n])
             tmp.scale(self.d[n])
             self.Xk_full += tmp
@@ -420,8 +420,8 @@ class Plan:
             # trick because I don't have a zero zonotope
             Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[know], configID))
             Xks[configID].scale(self.d[1])
-            for n1 in range(max(2,self.k+2-self.kmax), self.k + 1):
-                n = n1 % (self.kmax+1)
+            for n1 in range(max(2, self.k + 2 - self.kmax), self.k + 1):
+                n = n1 % (self.kmax + 1)
                 tmp = deepcopy(self.Nu[n].at_config(self.Sn[know], configID))
                 tmp.scale(self.d[n])
                 Xks[configID] += tmp
