@@ -9,6 +9,10 @@ import time
 from utils import GeoTools
 
 
+class NotInGoalError(Exception):
+    pass
+
+
 class KDTree:
     """Wrapper class for scipy.spatial.cKDTree
 
@@ -116,15 +120,21 @@ class Graph:
         if timing:
             print("Connecting took: {:0.2f} s.".format(t3 - t2))
 
-    def sample_free(self, n, config):
+    def sample_free(self, n, config, goal_region=None):
         """Sample n nodes in the free space."""
         num_added = 0
         new_samples = []
         while num_added < n:
-            sample = GeoTools.sample_in_range(self.x_range)
-            if not self.env.contains(GeoTools.array2point(sample), config):
-                new_samples.append(sample)
-                num_added += 1
+            try:
+                sample = GeoTools.sample_in_range(self.x_range)
+                if num_added == 0 and goal_region is not None:
+                    if not goal_region.contains(sample):
+                        raise NotInGoalError
+                if not self.env.contains(GeoTools.array2point(sample), config):
+                    new_samples.append(sample)
+                    num_added += 1
+            except NotInGoalError:
+                pass
         self.add_sample(new_samples)
         self.update_kdtree()
 
