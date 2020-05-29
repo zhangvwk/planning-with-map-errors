@@ -308,7 +308,6 @@ class Plan:
         know = (self.k+1) % (self.kmax+1)
 
         # print("========== k = {}".format(self.k))
-        self.Sn[know] = lines
         prev_lines = self.Sn[kprev]  # self.k not updated yet
         same = np.intersect1d(lines, prev_lines)
         additional = np.setdiff1d(lines, same)
@@ -323,11 +322,12 @@ class Plan:
                     np.intersect1d(additional, self.Sn[n]).size == 0
                     or np.intersect1d(missing, self.Sn[n]).size == 0
                 ):
-                    self.Nu[n].set_values(self.Sn[n], self.Sn[know])
+                    self.Nu[n].set_values(self.Sn[n], lines)
 
+        self.Sn[know] = lines
         Nu_new = NuValues(self.Sn[know], w, self.R, self._nlines_tot)
-        self.Nu[know % (self.kmax+1)] = Nu_new
-        self.Nu_full[know % (self.kmax+1)] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
+        self.Nu[know] = Nu_new
+        self.Nu_full[know] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
         self.k += 1
 
     def update_coeffs(self):
