@@ -183,13 +183,25 @@ class Graph:
                 self.env.get_lines_seen(GeoTools.array2point(self.samples[sample_idx]))
             )
 
-    def plot(self, ax=None, plot_edges=True):
+    def plot(self, ax=None, plot_edges=True, show_idx=False):
         """Plot the the nodes and edges of the graph.
         Note: this can take a long time if plot_edges is set to True.
         """
         self.env.plot(ax=ax)
-        plt.scatter(self.x_init[0], self.x_init[1], color="r", label="x_init")
-        plt.scatter(self.samples[1:, 0], self.samples[1:, 1])
+        x_init_x, x_init_y = self.x_init[:2]
+        plt.scatter(x_init_x, x_init_y, color="r", label="x_init")
+        if show_idx:
+            plt.annotate(
+                str(0), [x_init_x, x_init_y], fontsize=10,
+            )
+            for i in range(len(self.samples[1:,])):
+                sample_x, sample_y = self.samples[1 + i, :2]
+                plt.scatter(sample_x, sample_y, color="g")
+                plt.annotate(
+                    str(i + 1), [sample_x, sample_y], fontsize=10,
+                )
+        else:
+            plt.scatter(self.samples[1:, 0], self.samples[1:, 1], color="g")
         if plot_edges:
             self.plot_edges()
 
