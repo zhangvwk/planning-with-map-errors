@@ -68,15 +68,24 @@ class Graph:
         self.env = environment
         self.planner = planner
 
+    def initialize(self):
+        self.init_samples()
+        self.init_edges()
+        self.lines_seen = []
+        self.r = None
+        self.update_kdtree()
+
     def init_samples(self):
         """Initializes the samples (nodes) and the edges.
         """
         self.samples = np.zeros((1, self.dim))
         self.samples[0, :] = self.x_init
-        self.edges = collections.defaultdict(lambda: collections.defaultdict(tuple))
-        self.lines_seen = []
-        self.r = None
         self.update_kdtree()
+
+    def init_edges(self):
+        """Initializes the edges.
+        """
+        self.edges = collections.defaultdict(lambda: collections.defaultdict(tuple))
 
     def update_kdtree(self):
         """Update internal KDTree."""
@@ -86,13 +95,26 @@ class Graph:
         """Wrapper around self.init_samples().
         Meant to be called outside the class.
         """
-        self.init_samples()
+        self.initialize()
+
+    def set_samples(self, samples):
+        self.samples = samples
+        self.update_kdtree()
 
     def get_heuristic_r(self, n):
         eps = self.env.vol_free / n
         return eps * (1 + 3.5 * eps)
 
-    def build(self, n, r=None, max_neighbors=6, config="worst", tol=1e-2, timing=True):
+    def build(
+        self,
+        n,
+        r=None,
+        max_neighbors=6,
+        config="worst",
+        tol=1e-2,
+        bidir=True,
+        timing=True,
+    ):
         """Build the graph.
         Args:
             n (int): Number of nodes to sample.
@@ -106,16 +128,23 @@ class Graph:
         self.r = r
         not_sampled = np.all(np.abs(self.samples - np.zeros((1, self.dim))) < 1e-5)
         if not_sampled:
+            self.init_samples()
             t0 = time.time()
             self.sample_free(n, config)
             t1 = time.time()
             if timing:
                 print("Sampling took: {:0.2f} s.".format(t1 - t0))
+        self.init_edges()
         t2 = time.time()
         if max_neighbors is None:
             max_neighbors = len(self.samples)
-        for src_idx in range(len(self.samples)):
-            self.connect(src_idx, r, max_neighbors, config, tol)
+        self.connect(0, r, max_neighbors, config, tol, bidir)
+        # for src_idx in range(len(self.samples)):
+        for src_idx in self.skdtree.get_knn(self.samples[0], k=len(self.samples))[1][
+            1:
+        ]:
+            # print("src_idx {}".format(src_idx))
+            self.connect(src_idx, r, max_neighbors, config, tol, bidir)
         t3 = time.time()
         if timing:
             print("Connecting took: {:0.2f} s.".format(t3 - t2))
@@ -142,7 +171,7 @@ class Graph:
         """Add a sample to the current set of samples."""
         self.samples = np.vstack((self.samples, new_samples))
 
-    def connect(self, src_idx, r, max_neighbors, config, tol):
+    def connect(self, src_idx, r, max_neighbors, config, tol, bidir):
         """Connect src_idx'th node to any other node in the graph,
         in the limit of a total of max_neighbors, for which the optimal
         cost is less than r and for which the optimal trajectory lies in the free space.
@@ -155,8 +184,11 @@ class Graph:
                 consider per node.
         """
         for dest_idx in self.skdtree.get_knn(
-            self.samples[src_idx], k=min(max_neighbors, len(self.samples))
+            self.samples[src_idx], k=min(max_neighbors + 1, len(self.samples))
         )[1][1:]:
+            # print("dest_idx = {}".format(dest_idx))
+            if not bidir and src_idx in self.edges[dest_idx]:
+                continue
             cost, traj = self.compute_path(
                 self.samples[src_idx], self.samples[dest_idx], tol
             )
@@ -182,6 +214,12 @@ class Graph:
             self.lines_seen.append(
                 self.env.get_lines_seen(GeoTools.array2point(self.samples[sample_idx]))
             )
+
+    def indices2path(self, indices_list):
+        path = []
+        for idx in indices_list:
+            path.append(self.samples[idx, :2])
+        return path
 
     def plot(self, ax=None, plot_edges=True, show_idx=False):
         """Plot the the nodes and edges of the graph.
