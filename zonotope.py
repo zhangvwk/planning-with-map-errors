@@ -36,7 +36,7 @@ class Zonotope:
         n_points = XY.shape[0]
         ineq = A.dot(XY.T)
         for i in range(n_points):
-            if not np.all(ineq[:,i]<b):
+            if not np.all(ineq[:, i] < b):
                 return False
         return True
 
@@ -173,3 +173,7 @@ class Zonotope:
         s1 = self.get_confidence_sets(m)[0]
         s2 = Z.get_confidence_sets(m)[0]
         return not pc.is_empty(s1.to_poly().intersect(s2.to_poly()))
+
+    def plot(self, scaling_factors, ax):
+        for confid_set in self.get_confidence_sets(scaling_factors):
+            confid_set.to_poly().plot(ax=ax)
