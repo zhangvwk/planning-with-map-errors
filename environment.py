@@ -15,17 +15,19 @@ class Environment2D:
 
     def __init__(self, x_lims, y_lims):
         self.x_range = np.array([x_lims, y_lims])
-        self.initialize_rectangles()
+        self.initialize()
+
+    def initialize(self):
+        self.rectangles = {}
         self.vol_tot = self.as_rectangle().as_poly["original"].volume
         self.vol_obs = 0
         self.vol_free = self.vol_tot
         self.nlines_tot = 0
 
-    def initialize_rectangles(self):
-        self.rectangles = {}
-
     def clear(self):
-        self.initialize_rectangles()
+        """Meant to be called outside the class.
+        """
+        self.initialize()
 
     def as_rectangle(self):
         """Return the environment as a Rectangle object."""
@@ -39,10 +41,20 @@ class Environment2D:
         )
 
     def add_rectangles(self, list_rectangles):
+        """Add a list of rectangles to the rectangles attribute.
+        Args:
+            list_rectangles (list of Rectangle): list of rectangles to add.
+        """
         for rectangle in list_rectangles:
             self.add_rectangle(rectangle)
 
     def add_rectangle(self, rectangle, verbose=True):
+        """Add a rectangle to the rectangles attribute (list) if valid
+        and update the range of the environment if said object goes beyond the
+        current limits.
+        Args:
+            rectangle (Rectangle): rectangle to add.
+        """
         try:
             assert self.is_valid_id(rectangle)
         except AssertionError:
@@ -76,9 +88,18 @@ class Environment2D:
             raise
 
     def is_valid_id(self, rectangle):
+        """Return True if rectangle has an ID that is not taken already.
+        Args:
+            rectangle (Rectangle)
+        """
         return rectangle.id not in self.rectangles
 
     def is_valid_rectangle(self, rectangle, verbose=True):
+        """Return True if rectangle is a valid region in the environment, assuming
+        by the "worst" (i.e. most inflated) line configurations.
+        Args:
+            rectangle (Rectangle)
+        """
         return GeoTools.is_valid_region(rectangle.as_poly["worst"], self, verbose)
 
     def add_obstacles(self, num_obs, lgth, wdth, ang=None, max_iter=1e3):
@@ -109,12 +130,26 @@ class Environment2D:
             added += 1
 
     def contains(self, p, config="worst"):
+        """Return True if self contains a point, assuming a certain configuration.
+        Args:
+            p (Point): point to check for.
+            config (str): map configuration to check point containment for, defaults to
+                "worst", but other options are "best" or "full".
+        """
         for rectangle_id in self.rectangles:
             if self.rectangles[rectangle_id].contains(p, config):
                 return True
         return False
 
     def is_intersected(self, line, exclude=-1, config="worst"):
+        """Return True if self is intersected by a line, assuming a certain
+        configuration.
+        Args:
+            line (list of Point): line to check for.
+            exclude (int): rectangle ID to exclude for this intersection check.
+            config (str): map configuration to check point containment for, defaults to
+                "worst", but other options are "best" or "full".
+        """
         for rectangle_id in self.rectangles:
             if rectangle_id == exclude:
                 continue

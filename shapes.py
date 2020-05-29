@@ -72,6 +72,7 @@ class Polygon:
 
     def __init__(self, id_, vertices, plot_sty="ggplot"):
         try:
+            assert isinstance(id_, int)
             self.id = id_
             self.vertices = vertices
             self.edges = GeoTools.vertices2edges(vertices)
@@ -230,6 +231,14 @@ class Rectangle(Polygon):
         self.update_stored_configs()
 
     def update_stored_configs(self):
+        """Update the vertices, edges, zonotopes and polytopes corresponding to five
+        configurations:
+            "original": as per the very first instantiation of the object.
+            "full": considering centered errors.
+            "worst": considering most inflated (i.e. positive extreme) errors.
+            "best": considering least inflated (i.e. negative extreme) errors.
+            "actual": considering actual errors.
+        """
         self.vertices = {
             "original": self.vertices_original,
             "full": self.get_vertices("full"),
@@ -281,14 +290,15 @@ class Rectangle(Polygon):
 
     def get_vertices(self, config, as_array=False):
         """Return the four vertices given a config.
-        config:
-        None corresponds to the non-centered rectangle.
-        "full" corresponds to the centered rectangle.
-        "actual" corresponds to the actual rectangle.
-        bitarray(b1,b2,b3,b4) where the b's are binary values corresponds to
-        the rectangle with the left (0) or right (1) extremes for each line.
-        "worst" is mapped to bitarray('1111').
-        "best" is mapped to bitarray('0000').
+        Args:
+            config (str or bitarray):
+                None corresponds to the non-centered rectangle.
+                "full" corresponds to the centered rectangle.
+                "actual" corresponds to the actual rectangle.
+                bitarray(b1,b2,b3,b4) where the b's are binary values corresponds to
+                the rectangle with the left (0) or right (1) extremes for each line.
+                "worst" is mapped to bitarray('1111').
+                "best" is mapped to bitarray('0000').
         """
         vertices_config = self.vertices_original[:]
         if config is not None:
@@ -316,6 +326,12 @@ class Rectangle(Polygon):
         return vertices_config
 
     def set_line_error_bounds(self, line_i, bound_l, bound_r):
+        """Set the bounds of the error of the line of index line_i.
+        Args:
+            line_i (int): index of the line to consider.
+            bound_l, bound_r (float): left and right extremes of the range
+                to set for the line.
+        """
         assert line_i < 4
         assert bound_l <= bound_r
         self.error_bounds[line_i] = np.array([bound_l, bound_r])
@@ -324,6 +340,11 @@ class Rectangle(Polygon):
         self.update_stored_configs()
 
     def set_error_bounds(self, bounds_l, bounds_r):
+        """Set the bounds of the errors.
+        Args:
+            bounds_l, bounds_r (np.ndarray, (4,)): left and right extremes
+                of the range to set for the four lines.
+        """
         assert np.all(bounds_l <= bounds_r)
         self.error_bounds[:, 0] = bounds_l
         self.error_bounds[:, 1] = bounds_r
@@ -332,16 +353,25 @@ class Rectangle(Polygon):
         self.update_stored_configs()
 
     def set_line_actual_error(self, line_i, err):
+        """Set the actual error of the line of index line_i.
+        Args:
+            line_i (int): index of the line to consider.
+            err (float): actual error to set.
+        """
         assert line_i < 4
         assert self.error_bounds[line_i][0] <= err <= self.error_bounds[line_i][1]
         self.actual_errors[line_i] = err
         self.update_stored_configs()
 
-    def set_actual_errors(self, err):
-        assert np.all(self.error_bounds[:, 0] <= err) and np.all(
-            self.error_bounds[:, 1] >= err
+    def set_actual_errors(self, errs):
+        """Set the actual errors.
+        Args:
+            errs (np.ndarray, (4,)): actual errors to set.
+        """
+        assert np.all(self.error_bounds[:, 0] <= errs) and np.all(
+            self.error_bounds[:, 1] >= errs
         )
-        self.actual_errors = err
+        self.actual_errors = errs
         self.update_stored_configs()
 
     def contains(self, p, config="worst"):
@@ -355,6 +385,12 @@ class Rectangle(Polygon):
         return np.all(A.dot(p.as_array()) <= b)
 
     def is_intersected(self, line, config="worst"):
+        """Return True if self is intersected by a line.
+        Args:
+            line (list of Point): line to consider for intersection with self.
+            config (str): rectangle configuration to check line intersection for,
+                defaults to "worst", but other options are "best" or "full".
+        """
         for edge in self.edges[config]:
             if GeoTools.doIntersect(edge[0], edge[1], line[0], line[1]):
                 return True
@@ -429,6 +465,12 @@ class Rectangle(Polygon):
         return Zonotope(center, generators, np.zeros((2, 2)))
 
     def get_center_gen(self, vertices_config=None):
+        """Return the center and the generators of self given vertices.
+        Args:
+            vertices_config (None or list of Point): vertices corresponding a certain
+                configuration of the line errors; if None, defaults to the original
+                vertices when object was first instantiated.
+        """
         if vertices_config is None:
             pA, pB, pC, _ = self.vertices_original
         else:
@@ -440,6 +482,9 @@ class Rectangle(Polygon):
         return center, generators
 
     def get_error_bounds(self):
+        """Return the left and right extremes of the errors of each line of self
+        as arrays.
+        """
         e_l = np.zeros(4)
         e_r = np.zeros(4)
         for i in range(4):
