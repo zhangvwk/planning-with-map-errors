@@ -60,7 +60,9 @@ class Searcher:
         except AttributeError:
             print("Please set the goal region using .set_goal(goal_region).")
 
-    def reached_goal(self):
+    def reached_goal(self, early_termination):
+        if not early_termination:
+            return False
         return len(
             [
                 p
@@ -124,7 +126,12 @@ class Searcher:
                 P_candidates.update(self.P[head_idx])
         return P_candidates
 
-    def explore(self, prob_threshold=0.1, scaling_factors=[6, 5, 4, 3, 2, 1]):
+    def explore(
+        self,
+        prob_threshold=0.1,
+        scaling_factors=[6, 5, 4, 3, 2, 1],
+        early_termination=True,
+    ):
         if self.x_init is None:
             print("Please set the source node using .set_source(x_init)")
             raise
@@ -138,7 +145,7 @@ class Searcher:
             raise
         self.prob_threshold = prob_threshold
         i = 0
-        while self.P_open and not self.reached_goal():
+        while self.P_open and not self.reached_goal(early_termination):
             # print("P_open = {}".format(self.P_open))
             # print("G = {}".format(self.G))
             for p, plan_number in self.G:
