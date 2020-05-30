@@ -39,7 +39,7 @@ class LQRPlanner:
         """
         return self.gain
 
-    def compute_path(self, u, v, max_iter=1000, tol=1e-3):
+    def compute_path(self, u, v, max_iter=1000, tol=1e-3, get_lqr_cost=False):
         """Compute a path from u to v using an LQR regulator
 
         Args:
@@ -48,7 +48,8 @@ class LQRPlanner:
             max_iter: maximum iteration before stopping forward path
             tol: termination criterion for forward pass
         """
-        cost = 0
+        lqr_cost = 0
+        l2_cost = 0
         path = [u - v]
         done = False
         converged = False
@@ -57,25 +58,31 @@ class LQRPlanner:
         while not done:
             x = path[iteration]
             control = -self.gain.dot(x)
-            cost += 0.5 * x.T.dot(self.Q.dot(x)) + 0.5 * control.T.dot(
+            lqr_cost += 0.5 * x.T.dot(self.Q.dot(x)) + 0.5 * control.T.dot(
                 self.R.dot(control)
             )
 
-            x = self.A.dot(x) + self.B.dot(control)
-            path.append(x)
+            x_new = self.A.dot(x) + self.B.dot(control)
+            l2_cost += np.linalg.norm(x_new[:2] - x[:2])
+            path.append(x_new)
             iteration += 1
 
-            converged = np.linalg.norm(x) < tol
+            converged = np.linalg.norm(x_new) < tol
             done = converged or (iteration >= max_iter)
 
         if not converged:
-            cost = np.Inf
+            lqr_cost = np.Inf
+            l2_cost = np.Inf
 
         Nsteps = len(path)
         Nstate = u.shape[0]
         path = np.vstack(path).reshape(Nsteps, Nstate)
         path += v.reshape(1, Nstate)
-        return cost, path
+        if not get_lqr_cost:
+            # print("u, v = {}, {}".format(u, v))
+            # print("l2_cost = {}".format(l2_cost))
+            return l2_cost, path
+        return lqr_cost, path
 
 
 class DummyPlanner:
