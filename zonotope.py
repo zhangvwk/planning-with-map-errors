@@ -1,6 +1,9 @@
 import numpy as np
 import polytope as pc
+import math
 from scipy.special import erf, erfinv
+from shapely.geometry import Polygon
+from pypoman import compute_polytope_vertices
 
 SCALING_FOR_INCLUSION = np.sqrt(2) * erfinv(0.9 ** 0.5)
 
@@ -87,7 +90,7 @@ class Zonotope:
         # store the H-representation and allow to reuse it until it is not valid anymore
         self.A = np.vstack((Cp, -Cp))
         self.b = np.concatenate((dp, dm))
-        self._H_is_valid = True #
+        self._H_is_valid = True
         return self.A, self.b
 
     def to_poly(self):
@@ -151,7 +154,9 @@ class Zonotope:
         assert n == 2  # what follows is only valid in 2D
         scaling_factors = np.array(scaling_factors)
         k = scaling_factors.shape[0]
-        X = X.to_poly()
+
+        # calling pc.extreme on this one is fast, maybe because it is a plain reactangle?
+        X = Polygon(pc.extreme(X.to_poly()))
 
         confid_sets = self.get_confidence_sets(scaling_factors)
         # append m=0 to the set of scaling factors
@@ -166,10 +171,11 @@ class Zonotope:
         # compute intersection volumes
         V = np.zeros((k,))
         for i in range(k):
-            p = confid_sets[i].to_poly().intersect(X)
-            XY = pc.extreme(p)
-            if XY is not None:
-                V[i] = area(XY[:, 0], XY[:, 1])
+            A, b = confid_sets[i].to_H()
+            vertices = compute_polytope_vertices(A, b) # fast C code for vertex enumeration
+            vertices.sort(key=lambda c:math.atan2(c[0], c[1])) # sort those vertices
+            X2 = Polygon(vertices) # construct a Polygon
+            V[i] = X2.intersection(X).area # this is faster than intersect of polytope
 
         # compute intersection prob
         prob = 1 - erf(scaling_factors[0] / np.sqrt(2.0)) ** (2.0 * n)
