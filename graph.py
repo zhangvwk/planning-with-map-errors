@@ -7,6 +7,7 @@ import time
 
 # Custom libraries
 from utils import GeoTools
+from shapes import Point
 
 
 class NotInGoalError(Exception):
@@ -86,6 +87,7 @@ class Graph:
         """Initializes the edges.
         """
         self.edges = collections.defaultdict(lambda: collections.defaultdict(tuple))
+        self.controls = collections.defaultdict(lambda: collections.defaultdict())
 
     def update_kdtree(self):
         """Update internal KDTree."""
@@ -112,7 +114,6 @@ class Graph:
         max_neighbors=6,
         config="worst",
         tol=1e-2,
-        bidir=True,
         timing=True,
     ):
         """Build the graph.
@@ -138,16 +139,18 @@ class Graph:
         t2 = time.time()
         if max_neighbors is None:
             max_neighbors = len(self.samples)
-        self.connect(0, r, max_neighbors, config, tol, bidir)
-        # for src_idx in range(len(self.samples)):
-        for src_idx in self.skdtree.get_knn(self.samples[0], k=len(self.samples))[1][
-            1:
-        ]:
-            # print("src_idx {}".format(src_idx))
-            self.connect(src_idx, r, max_neighbors, config, tol, bidir)
+        self.connect(0, r, max_neighbors, config, tol)
+        for src_idx in range(len(self.samples)):
+        # for src_idx in self.skdtree.get_knn(self.samples[0], k=len(self.samples))[1][
+        #     1:
+        # ]:
+            self.connect(src_idx, r, max_neighbors, config, tol)
         t3 = time.time()
         if timing:
             print("Connecting took: {:0.2f} s.".format(t3 - t2))
+
+    def fromarray(self, array):
+        return Point(array[0], array[1])
 
     def sample_free(self, n, config, goal_region=None):
         """Sample n nodes in the free space."""
@@ -159,7 +162,7 @@ class Graph:
                 if num_added == 0 and goal_region is not None:
                     if not goal_region.contains(sample):
                         raise NotInGoalError
-                if not self.env.contains(GeoTools.array2point(sample), config):
+                if not self.env.contains(self.fromarray(sample), config):
                     new_samples.append(sample)
                     num_added += 1
             except NotInGoalError:
@@ -171,7 +174,7 @@ class Graph:
         """Add a sample to the current set of samples."""
         self.samples = np.vstack((self.samples, new_samples))
 
-    def connect(self, src_idx, r, max_neighbors, config, tol, bidir):
+    def connect(self, src_idx, r, max_neighbors, config, tol):
         """Connect src_idx'th node to any other node in the graph,
         in the limit of a total of max_neighbors, for which the optimal
         cost is less than r and for which the optimal trajectory lies in the free space.
@@ -186,14 +189,12 @@ class Graph:
         for dest_idx in self.skdtree.get_knn(
             self.samples[src_idx], k=min(max_neighbors + 1, len(self.samples))
         )[1][1:]:
-            # print("dest_idx = {}".format(dest_idx))
-            if not bidir and src_idx in self.edges[dest_idx]:
-                continue
-            cost, traj = self.compute_path(
+            cost, traj, controls = self.compute_path(
                 self.samples[src_idx], self.samples[dest_idx], tol
             )
             if cost <= r and not self.intersects(traj, config):
                 self.edges[src_idx][dest_idx] = (cost, traj)
+                self.controls[src_idx][dest_idx] = controls
 
     def compute_path(self, u, v, tol):
         """Wrapper around the planner attribute."""
@@ -202,8 +203,8 @@ class Graph:
     def intersects(self, traj, config):
         """Return false if a trajectory lies in the free space."""
         for point_idx in range(len(traj) - 1):
-            p = GeoTools.array2point(traj[point_idx])
-            p_ = GeoTools.array2point(traj[point_idx + 1])
+            p = self.fromarray(traj[point_idx])
+            p_ = self.fromarray(traj[point_idx + 1])
             if self.env.is_intersected([p, p_], config):
                 return True
         return False
@@ -212,7 +213,7 @@ class Graph:
         """Update the lines seen by each vertex of the graph."""
         for sample_idx in range(len(self.samples)):
             self.lines_seen.append(
-                self.env.get_lines_seen(GeoTools.array2point(self.samples[sample_idx]))
+                self.env.get_lines_seen(self.fromarray(self.samples[sample_idx]))
             )
 
     def indices2path(self, indices_list):

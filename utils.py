@@ -117,6 +117,18 @@ class GeoTools:
                 return False
         return True
 
+    @staticmethod
+    def indices2traj(path_indices, n, m, graph):
+        x_noms = np.empty((0, n))  # n = state dim
+        u_noms = np.empty((0, m))  # m = control dim
+        for i in range(len(path_indices) - 1):
+            idx_curr = path_indices[i]
+            idx_next = path_indices[i + 1]
+            x_noms = np.vstack((x_noms, graph.edges[idx_curr][idx_next][1]))
+            u_noms = np.vstack((u_noms, graph.controls[idx_curr][idx_next]))
+            u_noms = np.vstack((u_noms, np.zeros(m)))
+        return x_noms, u_noms
+
 
 class TestUtil:
     @staticmethod

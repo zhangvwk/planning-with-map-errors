@@ -104,7 +104,7 @@ class Simulator:
             u = self.get_controls(u_noms[k], x_est, x_noms[k])
             x_bar, P_bar = self.predict(x_est, u, P_est)
             x = self.simulate_state(x, u)
-            if self.env.contains(x, Point(x[0], x[1]), config="actual"):
+            if self.env.contains(Point(x[0], x[1]), config="actual"):
                 collision = True
             C, b_actual, b_half, e, Rhat = self.get_obs_matrices(x)
             z = self.simulate_obs(x, C, b_actual)
@@ -135,5 +135,5 @@ class Simulator:
 
     def plot_trajs(self, xs, x_noms):
         for i in xs:
-            self.plot_traj(xs[i])
+            PlotTools.plot_traj(xs[i])
         PlotTools.plot_traj(x_noms, linestyle="--", color="k")

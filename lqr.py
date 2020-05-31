@@ -17,10 +17,11 @@ class LQRPlanner:
             A: State dynamics (NxN)
             B: Control dynamics (NxM)
         """
-        Ncontrol = B.shape[1]
+        self.Nstate = A.shape[0]
+        self.Ncontrol = B.shape[1]
         self.Q = Q
-        if Ncontrol == 1:
-            self.R = np.array(R).reshape((Ncontrol,))
+        if self.Ncontrol == 1:
+            self.R = np.array(R).reshape((self.Ncontrol,))
         else:
             self.R = R
         self.A = A
@@ -54,10 +55,14 @@ class LQRPlanner:
         done = False
         converged = False
         iteration = 0
+        # controls = np.empty((0, self.gain.shape[0]))
+        controls = []
 
         while not done:
             x = path[iteration]
             control = -self.gain.dot(x)
+            # controls = np.vstack((controls, control))
+            controls.append(control)
             lqr_cost += 0.5 * x.T.dot(self.Q.dot(x)) + 0.5 * control.T.dot(
                 self.R.dot(control)
             )
@@ -75,14 +80,14 @@ class LQRPlanner:
             l2_cost = np.Inf
 
         Nsteps = len(path)
-        Nstate = u.shape[0]
-        path = np.vstack(path).reshape(Nsteps, Nstate)
-        path += v.reshape(1, Nstate)
+        path = np.vstack(path).reshape(Nsteps, self.Nstate)
+        path += v.reshape(1, self.Nstate)
+        controls = np.vstack(controls).reshape(-1, self.Ncontrol)
         if not get_lqr_cost:
             # print("u, v = {}, {}".format(u, v))
             # print("l2_cost = {}".format(l2_cost))
-            return l2_cost, path
-        return lqr_cost, path
+            return l2_cost, path, controls
+        return lqr_cost, path, controls
 
 
 class DummyPlanner:
