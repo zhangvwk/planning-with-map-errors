@@ -152,11 +152,11 @@ class NuValues:
                     # a line in Sn that is also in Sk
                     if bits[i]:
                         # choose + half width
-                        centers[iSn] = self._w[iSn]
+                        centers[iSn] = -self._w[iSn]
                         key[Sn[iSn]] = True  # Sn[iSn] = this line ID
                     else:
                         # choose - half width
-                        centers[iSn] = -self._w[iSn]
+                        centers[iSn] = self._w[iSn]
                     i += 1
                 else:
                     # a line in Sn that is not in Sk, consider the full range
@@ -418,6 +418,10 @@ class Plan:
 
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
+            bconfig = PlanUtils.configID2bitarray(
+                configID, self.Sn[know], self._nlines_tot
+            )
+            config = bconfig[0 * 4 : (0 + 1) * 4]
             Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[know], configID))
             Xks[configID].scale(self.d[1])
             for n1 in range(max(2, self.k + 2 - self.kmax), self.k + 1):
