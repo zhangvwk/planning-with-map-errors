@@ -48,6 +48,7 @@ class Zonotope:
         self.c = T.dot(self.c)
         self.G = T.dot(self.G)
         self.Sig = T.dot(self.Sig.dot(T.transpose()))
+        self._H_is_valid = False # invalidate the stored H representation
         # print("c = {}".format(self.c))
         # print("T = {}".format(T))
         # print("Sig = {}".format(self.Sig))
@@ -83,8 +84,10 @@ class Zonotope:
             dp[i] = Cpi.dot(self.c) + delta_di
             dm[i] = -Cpi.dot(self.c) + delta_di
 
+        # store the H-representation and allow to reuse it until it is not valid anymore
         self.A = np.vstack((Cp, -Cp))
         self.b = np.concatenate((dp, dm))
+        self._H_is_valid = True #
         return self.A, self.b
 
     def to_poly(self):
@@ -96,6 +99,11 @@ class Zonotope:
         This is the girard method as described in:
         Reachability of Uncertain Linear Systems Using Zonotopes (2005)
         """
+        if self.G.shape[1] < 4:
+            return
+
+        self._H_is_valid = False # invalidate the stored H-rep
+
         # keep reducing as long as the order is greater than the target order
         while self.get_order() > target_order:
             # need at least 4 generators
