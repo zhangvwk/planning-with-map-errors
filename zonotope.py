@@ -14,6 +14,7 @@ class Zonotope:
         self.c = center
         self.G = generators
         self.Sig = cov
+        self._H_is_valid = False
         assert self.G.shape[0] == self.c.shape[0]
         assert self.G.shape[0] == self.Sig.shape[0]
         assert self.G.shape[0] == self.Sig.shape[1]
@@ -57,6 +58,9 @@ class Zonotope:
         This operation is expensive but tractable when n=2.
         For more details, see Matthias' thesis, p. 15.
         """
+        if (self._H_is_valid):
+            return self.A, self.b
+
         if len(self.G.shape) == 1:
             self.G = np.reshape(self.G, (self.G.shape[0], 1))
         n = self.G.shape[0]
@@ -79,7 +83,9 @@ class Zonotope:
             dp[i] = Cpi.dot(self.c) + delta_di
             dm[i] = -Cpi.dot(self.c) + delta_di
 
-        return np.vstack((Cp, -Cp)), np.concatenate((dp, dm))
+        self.A = np.vstack((Cp, -Cp))
+        self.b = np.concatenate((dp, dm))
+        return self.A, self.b
 
     def to_poly(self):
         A, b = self.to_H()
