@@ -1,7 +1,8 @@
 # Standard libraries
 import numpy as np
-import collections
+import collections, pdb, multiprocessing, time
 from copy import deepcopy
+from joblib import Parallel, delayed
 
 # Custom libraries
 from plan import Plan
@@ -9,6 +10,46 @@ from utils import GeoTools
 from polytope import Polytope
 from shapes import Point
 
+def process_plan(searcher, scaling_factors, p):
+    print(
+        "========== p = {} at index {} ==========".format(
+            searcher.graph.samples[p.head_idx], p.head_idx
+        )
+    )
+    print("NEIGHBORS: {}".format(searcher.graph.edges[p.head_idx].keys()))
+    print("p.path_indices = {}".format(p.path_indices))
+
+    plans_to_add = []
+
+    for neighbor_idx, v in searcher.graph.edges[p.head_idx].items():
+        if neighbor_idx in set(p.path_indices):
+            continue
+        discard = False
+        to_neighbor_cost, to_neighbor_path = v
+        print("----- neighbor_idx = {} -----".format(neighbor_idx))
+        p_copy = deepcopy(p)
+        for i, sub_neighbor in enumerate(to_neighbor_path[1:]):
+            p_copy.add_point(
+                searcher.graph.env,
+                sub_neighbor,
+                searcher.graph.scales[p.head_idx][neighbor_idx][i],
+            )
+            prob_collision = p_copy.get_max_prob_collision(
+                searcher.graph.env, scaling_factors
+            )
+            print("prob_collision = {}".format(prob_collision))
+            if searcher.collision(prob_collision):
+                print("prob_collision = {}".format(prob_collision))
+                print("collided!")
+                discard = True
+                break
+        if discard:
+            print("discarded")
+            continue
+        p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
+        plans_to_add.append((p_copy, neighbor_idx))
+
+    return plans_to_add
 
 class Searcher:
     def __init__(self, graph, pruning_coeff=0.5):
@@ -131,49 +172,35 @@ class Searcher:
             print("Invalid goal region.")
             raise
         self.prob_threshold = prob_threshold
-        i = 0
+
+        # count the number of available cores
+        n_cpu = multiprocessing.cpu_count()
+        n_jobs = max(n_cpu-2, 1)
+        print('I have detected %d cores, I am going to use %d' % (n_cpu,
+            n_jobs))
+        time.sleep(5) # sleep for 5 s so that I can read it 
+
+        i = 0 # counter for iteration
         while self.P_open and not self.reached_goal(early_termination):
-            for p, plan_number in self.G:
-                print(
-                    "========== p = {} at index {} ==========".format(
-                        self.graph.samples[p.head_idx], p.head_idx
-                    )
+            results = Parallel(n_jobs=n_jobs)( \
+                delayed(process_plan)(self, scaling_factors, p) for p,_ in self.G
                 )
-                print("NEIGHBORS: {}".format(self.graph.edges[p.head_idx].keys()))
-                print("p.path_indices = {}".format(p.path_indices))
-                for neighbor_idx, v in self.graph.edges[p.head_idx].items():
-                    if neighbor_idx in set(p.path_indices):
-                        continue
-                    discard = False
-                    to_neighbor_cost, to_neighbor_path = v
-                    print("----- neighbor_idx = {} -----".format(neighbor_idx))
-                    p_copy = deepcopy(p)
-                    for i, sub_neighbor in enumerate(to_neighbor_path[1:]):
-                        p_copy.add_point(
-                            self.graph.env,
-                            sub_neighbor,
-                            self.graph.scales[p.head_idx][neighbor_idx][i],
-                        )
-                        prob_collision = p_copy.get_max_prob_collision(
-                            self.graph.env, scaling_factors
-                        )
-                        print("prob_collision = {}".format(prob_collision))
-                        if self.collision(prob_collision):
-                            print("prob_collision = {}".format(prob_collision))
-                            print("collided!")
-                            discard = True
-                            break
-                    if discard:
-                        print("discarded")
-                        continue
-                    p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
-                    self.plan_number += 1
-                    self.P[neighbor_idx].add(p_copy)
-                    self.P_open.add((p_copy, self.plan_number))
+            # results is a list of size n_jobs containing (plan, neighbor_idx)
+            # pairs
+            results = [pairs for x in results for pairs in x]
+            for plan, neighbor_idx in results:
+                self.plan_number += 1
+                self.P[neighbor_idx].add(plan)
+                self.P_open.add((plan, self.plan_number))
+
+            print(80*'=')
+            print('Done iteration %d' % i) 
+            print(80*'=')
             self.remove_dominated()
             self.P_open -= self.G
             i += 1
             self.prune(i)
+
         P_candidates = self.get_candidates()
         print("P_candidates = {}".format(P_candidates))
         if not P_candidates:
