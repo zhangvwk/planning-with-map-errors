@@ -88,6 +88,7 @@ class Graph:
         """
         self.edges = collections.defaultdict(lambda: collections.defaultdict(tuple))
         self.controls = collections.defaultdict(lambda: collections.defaultdict())
+        self.scales = collections.defaultdict(lambda: collections.defaultdict(float))
 
     def update_kdtree(self):
         """Update internal KDTree."""
@@ -108,13 +109,7 @@ class Graph:
         return eps * (1 + 3.5 * eps)
 
     def build(
-        self,
-        n,
-        r=None,
-        max_neighbors=6,
-        config="worst",
-        tol=1e-2,
-        timing=True,
+        self, n, r=None, max_neighbors=6, config="worst", tol=1e-2, timing=True,
     ):
         """Build the graph.
         Args:
@@ -141,9 +136,6 @@ class Graph:
             max_neighbors = len(self.samples)
         self.connect(0, r, max_neighbors, config, tol)
         for src_idx in range(len(self.samples)):
-        # for src_idx in self.skdtree.get_knn(self.samples[0], k=len(self.samples))[1][
-        #     1:
-        # ]:
             self.connect(src_idx, r, max_neighbors, config, tol)
         t3 = time.time()
         if timing:
@@ -195,6 +187,10 @@ class Graph:
             if cost <= r and not self.intersects(traj, config):
                 self.edges[src_idx][dest_idx] = (cost, traj)
                 self.controls[src_idx][dest_idx] = controls
+                controls_norms = np.linalg.norm(controls, axis=1)
+                self.scales[src_idx][dest_idx] = np.concatenate(
+                    (np.zeros(1), controls_norms / np.max(controls_norms))
+                )
 
     def compute_path(self, u, v, tol):
         """Wrapper around the planner attribute."""

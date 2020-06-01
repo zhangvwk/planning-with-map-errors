@@ -52,11 +52,11 @@ class Simulator:
             self.motion_ready and self.obs_ready and self.gain_ready and self.est_ready
         )
 
-    def simulate_state(self, x, u):
+    def simulate_state(self, x, u, scale=1):
         return (
             self.A.dot(x)
             + self.B.dot(u)
-            + np.random.multivariate_normal(np.zeros(self.Q.shape[0]), self.Q)
+            + np.random.multivariate_normal(np.zeros(self.Q.shape[0]), self.Q) * scale
         )
 
     def get_obs_matrices(self, x, conf_factor=3):
@@ -91,7 +91,7 @@ class Simulator:
         P_est = (np.eye(L.shape[0]) - L.dot(C)).dot(P_bar)
         return x_est, P_est
 
-    def rollout(self, x0, x_noms, u_noms):
+    def rollout(self, x0, x_noms, u_noms, scales=None):
         assert self.is_initialized()
         x = x0
         xs = [x]
@@ -99,11 +99,13 @@ class Simulator:
         P_est = self.P_est_0
         x_ests = [x_est]
         x_bars = []
+        if scales is None:
+            scales = np.ones(len(x_noms))
         collision = False
         for k in range(len(x_noms)):
             u = self.get_controls(u_noms[k], x_est, x_noms[k])
             x_bar, P_bar = self.predict(x_est, u, P_est)
-            x = self.simulate_state(x, u)
+            x = self.simulate_state(x, u, scales[k])
             if self.env.contains(Point(x[0], x[1]), config="actual"):
                 collision = True
             C, b_actual, b_half, e, Rhat = self.get_obs_matrices(x)
@@ -118,7 +120,7 @@ class Simulator:
             x_bars.append(x_bar)
         return xs, x_ests, x_bars, collision
 
-    def run(self, iters, x0, S, x_noms, u_noms, verbose=True):
+    def run(self, iters, x0, S, x_noms, u_noms, scales=None, verbose=True):
         xs = {}
         x_ests = {}
         x_bars = {}
@@ -128,6 +130,7 @@ class Simulator:
                 x0 + np.random.multivariate_normal(np.zeros(S.shape[0]), S),
                 x_noms,
                 u_noms,
+                scales,
             )
             num_collisions += int(collision)
         prob_collision = float(num_collisions / iters)

@@ -87,6 +87,10 @@ class PlanUtils:
                 bconfig[Sn[i]] = True
         return bconfig
 
+    @staticmethod
+    def get_kmax(dt, horizon):
+        return int(horizon / dt)
+
 
 class NuValues:
     def __init__(self, Sn, w, cov, nlines_tot):
@@ -222,6 +226,7 @@ class Plan:
         self.A = None
         self.B = None
         self.Q = None
+        self.Q_scaled = [None] * (self.kmax + 1)
         self.K = None
         self.C = None
         self.P = None
@@ -273,17 +278,14 @@ class Plan:
         return self.motion_ready and self.gain_ready and self.est_ready
 
     def update_info(self, head_idx, cost_to_add, path_to_add):
+        """Update the head index, cost so far, and path taken.
+        """
         self.head_idx = head_idx
         self.cost += cost_to_add
         self.path_indices.append(head_idx)
 
-    def add_point(self, env, point, conf_factor=0.5):
-        """
-        - get C(k+1), R(k+1)
-        - P = Pbar - L*C*Pbar
-        - Pbar = A*P*A.T + Q
-        - L = Eq (1.9)
-        - update all Nu(n) if needed
+    def add_point(self, env, point, scale, conf_factor=0.5):
+        """Add a point to the plan and perform the necessary propagation.
         """
         if self.k == 0:
             assert self.is_initialized()
@@ -293,7 +295,9 @@ class Plan:
         self.rectangles_seen_now = list(lines_seen_now.keys())
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         self.C, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
-        Pbar = (self.A.dot(self.P)).dot(self.A.T) + self.Q
+        know = self.k % (self.kmax + 1)
+        self.Q_scaled[know] = self.Q * scale
+        Pbar = (self.A.dot(self.P)).dot(self.A.T) + self.Q_scaled[know]
         Rhat = PlanUtils.get_Rhat(self.R, w, conf_factor)
         self.L = (Pbar.dot(self.C.T)).dot(
             np.linalg.inv((self.C.dot(Pbar)).dot(self.C.T) + Rhat)
@@ -304,11 +308,12 @@ class Plan:
         self.update_coeffs()
 
     def update_Nu(self, env, lines, w):
+        """Update the measurement zonotopes.
+        """
         # self.k not updated yet
         kprev = self.k % (self.kmax + 1)
         know = (self.k + 1) % (self.kmax + 1)
 
-        # print("========== k = {}".format(self.k))
         prev_lines = self.Sn[kprev]  # self.k not updated yet
         same = np.intersect1d(lines, prev_lines)
         additional = np.setdiff1d(lines, same)
@@ -331,9 +336,7 @@ class Plan:
         self.k += 1
 
     def update_coeffs(self):
-        """
-        - from k to k+1
-        - assume L and C are already update by add_point
+        """Update the coefficients necessary for the linear reachability analysis.
         """
         M2 = np.eye(self.n) - self.L.dot(self.C)
 
@@ -373,6 +376,7 @@ class Plan:
                 configID, self.Sn[know], self._nlines_tot
             )
             for rectangle_idx in self.rectangles_seen_now:
+                # Get the corresponding rectangle configuration
                 config = bconfig[rectangle_idx * 4 : (rectangle_idx + 1) * 4]
                 p = max(
                     p,
@@ -401,7 +405,9 @@ class Plan:
         cov_offset = amb.dot(self.P0.dot(amb.T))
         for n1 in range(max(1, self.k + 1 - self.kmax), self.k + 1):
             n = n1 % (self.kmax + 1)
-            cov_offset += self.c[:, :, n].dot(self.Q.dot(self.c[:, :, n].T))
+            cov_offset += self.c[:, :, n].dot(
+                self.Q_scaled[n - 1].dot(self.c[:, :, n].T)
+            )
 
         know = self.k % (self.kmax + 1)
         n_extr = len(self.Sn[know])
@@ -418,10 +424,6 @@ class Plan:
 
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
-            bconfig = PlanUtils.configID2bitarray(
-                configID, self.Sn[know], self._nlines_tot
-            )
-            config = bconfig[0 * 4 : (0 + 1) * 4]
             Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[know], configID))
             Xks[configID].scale(self.d[1])
             for n1 in range(max(2, self.k + 2 - self.kmax), self.k + 1):
