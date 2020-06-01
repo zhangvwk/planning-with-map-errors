@@ -76,6 +76,11 @@ class Zonotope:
         for i in range(e):
             g = self.G[:, i]  # extract generator i
             gg = np.array([g[1], -g[0]])  # compute the cross product nX()
+            if np.linalg.norm(gg) < 1e-10:
+                Cp[i:,:] = 0
+                dp[i] = 1
+                dm[i] = 1
+                continue
             Cpi = gg / np.linalg.norm(gg)
             delta_di = 0
             for j in range(e):
