@@ -2,9 +2,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-# Custom libraries
-import shapes
-
 
 class GeoTools:
     """Utility class for geometry operations.
@@ -62,10 +59,6 @@ class GeoTools:
         if (o4 == 0) and GeoTools.onSegment(p2, q1, q2):
             return True
         return False
-
-    @staticmethod
-    def array2point(array):
-        return shapes.Point(array[0], array[1])
 
     @staticmethod
     def vertices2edges(vertices):
