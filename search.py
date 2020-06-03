@@ -120,17 +120,24 @@ class Searcher:
         return False
 
     def remove_dominated(self, prune=True):
-        if prune:
-            self.prune_alternate()
+        # if prune:
+        #     self.prune_alternate()
+        to_remove_from_P_open = set()
         for p, plan_number in self.P_open:
             if p.head_idx in self.P:
+                to_remove_from_P = set()
                 for q in self.P[p.head_idx]:
                     lower_cost = q.cost < p.cost
                     enclosed = q.Xk_full <= p.Xk_full
                     if lower_cost and enclosed:
-                        self.P_open.remove((p, plan_number))
-                        self.P.remove(p)
+                        print("q = {}, cost: {}".format(q.path_indices, q.cost))
+                        print("p = {}, cost: {}".format(p.path_indices, p.cost))
+                        # self.P_open.remove((p, plan_number))
                         print("Removing dominated.")
+                        to_remove_from_P_open.add((p, plan_number))
+                        to_remove_from_P.add(p)
+                self.P[p.head_idx] -= to_remove_from_P
+        self.P_open -= to_remove_from_P_open
 
     def prune_alternate(self, portion=0.1):
         num_open_plans = len(self.P_open)
