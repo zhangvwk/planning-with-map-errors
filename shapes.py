@@ -176,10 +176,11 @@ class Polygon:
             annot, self.get_center_gen()[0], fontsize=12, weight="bold", color=color
         )
 
-    def get_min_dist(self, p):
+    def get_min_dist(self, p, config="original"):
         min_dist = float("inf")
         min_proj = None
-        for edge in self.edges:
+        edges = self.edges[config]
+        for edge in edges:
             v = edge[0]
             w = edge[1]
             l2 = (v - w).norm() ** 2

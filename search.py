@@ -10,6 +10,7 @@ from utils import GeoTools
 from polytope import Polytope
 from shapes import Point
 
+
 def process_plan(searcher, scaling_factors, p):
     print(
         "========== p = {} at index {} ==========".format(
@@ -51,6 +52,7 @@ def process_plan(searcher, scaling_factors, p):
 
     return plans_to_add
 
+
 class Searcher:
     def __init__(self, graph, pruning_coeff=0.5):
         self.graph = graph
@@ -88,6 +90,7 @@ class Searcher:
     def set_goal(self, goal_region):
         """Input must be a Rectangle object.
         """
+        self.goal_region_rec = goal_region
         self.goal_region = goal_region.as_poly["original"]
 
     def is_valid_goal(self, config="worst", verbose=True):
@@ -116,7 +119,9 @@ class Searcher:
             )
         return False
 
-    def remove_dominated(self):
+    def remove_dominated(self, prune=True):
+        if prune:
+            self.prune_alternate()
         for p, plan_number in self.P_open:
             if p.head_idx in self.P:
                 for q in self.P[p.head_idx]:
@@ -125,22 +130,42 @@ class Searcher:
                     if lower_cost and enclosed:
                         self.P_open.remove((p, plan_number))
                         self.P.remove(p)
+                        print("Removing dominated.")
+
+    def prune_alternate(self, portion=0.1):
+        num_open_plans = len(self.P_open)
+        if num_open_plans >= 10:
+            print("num_open_plans = {}".format(num_open_plans))
+            P_open_sorted = sorted(
+                self.P_open,
+                key=lambda p_tuple: p_tuple[0].cost
+                * self.get_dist_ratio(p_tuple[0].head_idx),
+            )
+            num_open_plans_to_remove = int(portion * num_open_plans) + 1
+            self.P_open = set(P_open_sorted[:-num_open_plans_to_remove])
+            print("Removed {} plans in P_open.".format(num_open_plans_to_remove))
+            print("----- Removed plans paths -----")
+            for p, plan_number in P_open_sorted[-num_open_plans_to_remove:]:
+                print(p.path_indices)
+                print(
+                    "cost * ratio = {}".format(p.cost * self.get_dist_ratio(p.head_idx))
+                )
+            print("-------------------------------")
+
+    def get_dist_ratio(self, head_idx):
+        head_location = self.graph.samples[head_idx, :2]
+        dist2origin = np.linalg.norm(head_location - self.x_init[:2])
+        dist2goal = self.goal_region_rec.get_min_dist(
+            Point(head_location[0], head_location[1])
+        )[0]
+        ratio = (dist2origin + dist2goal) / dist2origin
+        return ratio
 
     def prune(self, i):
-        # print(
-        #     "=========================== [INFO] Calling prune ==========================="
-        # )
-        # print("G before = {}".format(self.G))
         self.G = set()
         for p, plan_number in self.P_open:
-            # print("p.cost = {}".format(p.cost))
-            # print("i * self.pruning_coeff = {}".format(i * self.pruning_coeff))
             if p.cost <= i * self.pruning_coeff:
                 self.G.add((p, plan_number))
-        # print("G after = {}".format(self.G))
-        # print(
-        #     "==========================================================================="
-        # )
 
     def collision(self, prob_collision):
         return prob_collision >= self.prob_threshold
@@ -175,27 +200,24 @@ class Searcher:
 
         # count the number of available cores
         n_cpu = multiprocessing.cpu_count()
-        n_jobs = max(n_cpu-2, 1)
-        print('I have detected %d cores, I am going to use %d' % (n_cpu,
-            n_jobs))
-        time.sleep(5) # sleep for 5 s so that I can read it 
+        n_jobs = max(n_cpu - 2, 1)
+        print("I have detected %d cores, I am going to use %d" % (n_cpu, n_jobs))
+        time.sleep(5)  # sleep for 5 s so that I can read it
 
-        i = 0 # counter for iteration
+        i = 0  # counter for iteration
         while self.P_open and not self.reached_goal(early_termination):
-            results = Parallel(n_jobs=n_jobs)( \
-                delayed(process_plan)(self, scaling_factors, p) for p,_ in self.G
-                )
-            # results is a list of size n_jobs containing (plan, neighbor_idx)
-            # pairs
+            results = Parallel(n_jobs=n_jobs)(
+                delayed(process_plan)(self, scaling_factors, p) for p, _ in self.G
+            )
             results = [pairs for x in results for pairs in x]
             for plan, neighbor_idx in results:
                 self.plan_number += 1
                 self.P[neighbor_idx].add(plan)
                 self.P_open.add((plan, self.plan_number))
 
-            print(80*'=')
-            print('Done iteration %d' % i) 
-            print(80*'=')
+            print(80 * "=")
+            print("Done iteration %d" % i)
+            print(80 * "=")
             self.remove_dominated()
             self.P_open -= self.G
             i += 1
