@@ -55,11 +55,11 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
     return plans_to_add
 
 
-def process_dominated(P, p, plan_number):
-    if p.head_idx in P:
+def process_dominated(P_head_idx, p, plan_number):
+    if len(P_head_idx) > 0:
         to_remove_from_P = set()
         to_remove_from_P_open = set()
-        for q in P[p.head_idx]:
+        for q in P_head_idx:
             lower_cost = q.cost < p.cost
             enclosed = q.Xk_full <= p.Xk_full
             if lower_cost and enclosed:
@@ -160,7 +160,7 @@ class Searcher:
         num_open_plans = len(self.P_open)
         to_remove_from_P_open = set()
         results = Parallel(n_jobs=n_jobs)(
-            delayed(process_dominated)(self.P, p, plan_number)
+            delayed(process_dominated)(self.P[p.head_idx], p, plan_number)
             for p, plan_number in self.P_open
         )
         for head_idx, to_remove_from_P_open, to_remove_from_P in results:
