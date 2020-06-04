@@ -12,18 +12,20 @@ from utils import GeoTools
 from shapes import Point
 
 
-def process_plan(searcher, scaling_factors, p):
+def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p):
     print(
         "========== p = {} at index {} ==========".format(
-            searcher.graph.samples[p.head_idx], p.head_idx
+            samples[p.head_idx], p.head_idx
         )
     )
-    print("NEIGHBORS: {}".format(searcher.graph.edges[p.head_idx].keys()))
+    print("NEIGHBORS: {}".format(edges[p.head_idx].keys()))
     print("p.path_indices = {}".format(p.path_indices))
+
+    start = time.time()
 
     plans_to_add = []
 
-    for neighbor_idx, v in searcher.graph.edges[p.head_idx].items():
+    for neighbor_idx, v in edges[p.head_idx].items():
         if neighbor_idx in set(p.path_indices):
             continue
         discard = False
@@ -32,20 +34,23 @@ def process_plan(searcher, scaling_factors, p):
         p_copy = deepcopy(p)
         for i, sub_neighbor in enumerate(to_neighbor_path[1:]):
             p_copy.add_point(
-                searcher.graph.env,
+                env,
                 sub_neighbor,
-                searcher.graph.scales[p.head_idx][neighbor_idx][i],
+                scales[p.head_idx][neighbor_idx][i],
             )
             prob_collision = p_copy.get_max_prob_collision(
-                searcher.graph.env, scaling_factors
+                env, scaling_factors
             )
-            if searcher.collision(prob_collision):
+            if prob_collision >= prob_threshold:
                 discard = True
                 break
         if discard:
             continue
         p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
         plans_to_add.append((p_copy, neighbor_idx))
+
+    elapsed = time.time() - start
+    print('Done p = {} at index {}, took {} seconds'.format(samples[p.head_idx], p.head_idx, elapsed))
 
     return plans_to_add
 
@@ -203,8 +208,11 @@ class Searcher:
 
         i = 0  # counter for iteration
         while self.P_open and not self.reached_goal(early_termination):
+            print("Processing %d plans" % len(self.G))
             results = Parallel(n_jobs=n_jobs)(
-                delayed(process_plan)(self, scaling_factors, p) for p, _ in self.G
+                delayed(process_plan)(self.graph.samples, self.graph.edges,
+                    self.graph.scales, self.graph.env,
+                    self.prob_threshold, scaling_factors, p) for p, _ in self.G
             )
             results = [pairs for x in results for pairs in x]
             for plan, neighbor_idx in results:
