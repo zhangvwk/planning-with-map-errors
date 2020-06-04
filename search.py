@@ -1,13 +1,14 @@
 # Standard libraries
 import numpy as np
-import collections, pdb, multiprocessing, time
+import collections
+import multiprocessing
+import time
 from copy import deepcopy
 from joblib import Parallel, delayed
 
 # Custom libraries
 from plan import Plan
 from utils import GeoTools
-from polytope import Polytope
 from shapes import Point
 
 
@@ -38,14 +39,10 @@ def process_plan(searcher, scaling_factors, p):
             prob_collision = p_copy.get_max_prob_collision(
                 searcher.graph.env, scaling_factors
             )
-            print("prob_collision = {}".format(prob_collision))
             if searcher.collision(prob_collision):
-                print("prob_collision = {}".format(prob_collision))
-                print("collided!")
                 discard = True
                 break
         if discard:
-            print("discarded")
             continue
         p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
         plans_to_add.append((p_copy, neighbor_idx))
@@ -120,8 +117,7 @@ class Searcher:
         return False
 
     def remove_dominated(self, prune=True):
-        # if prune:
-        #     self.prune_alternate()
+        num_open_plans = len(self.P_open)
         to_remove_from_P_open = set()
         for p, plan_number in self.P_open:
             if p.head_idx in self.P:
@@ -130,14 +126,15 @@ class Searcher:
                     lower_cost = q.cost < p.cost
                     enclosed = q.Xk_full <= p.Xk_full
                     if lower_cost and enclosed:
-                        print("q = {}, cost: {}".format(q.path_indices, q.cost))
-                        print("p = {}, cost: {}".format(p.path_indices, p.cost))
-                        # self.P_open.remove((p, plan_number))
-                        print("Removing dominated.")
                         to_remove_from_P_open.add((p, plan_number))
                         to_remove_from_P.add(p)
                 self.P[p.head_idx] -= to_remove_from_P
         self.P_open -= to_remove_from_P_open
+        print(
+            "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
+        )
+        if prune:
+            self.prune_alternate()
 
     def prune_alternate(self, portion=0.1):
         num_open_plans = len(self.P_open)
@@ -150,14 +147,7 @@ class Searcher:
             )
             num_open_plans_to_remove = int(portion * num_open_plans) + 1
             self.P_open = set(P_open_sorted[:-num_open_plans_to_remove])
-            print("Removed {} plans in P_open.".format(num_open_plans_to_remove))
-            print("----- Removed plans paths -----")
-            for p, plan_number in P_open_sorted[-num_open_plans_to_remove:]:
-                print(p.path_indices)
-                print(
-                    "cost * ratio = {}".format(p.cost * self.get_dist_ratio(p.head_idx))
-                )
-            print("-------------------------------")
+            print("Pruned {} plans in P_open.".format(num_open_plans_to_remove))
 
     def get_dist_ratio(self, head_idx):
         head_location = self.graph.samples[head_idx, :2]
