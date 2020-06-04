@@ -34,13 +34,9 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
         p_copy = deepcopy(p)
         for i, sub_neighbor in enumerate(to_neighbor_path[1:]):
             p_copy.add_point(
-                env,
-                sub_neighbor,
-                scales[p.head_idx][neighbor_idx][i],
+                env, sub_neighbor, scales[p.head_idx][neighbor_idx][i],
             )
-            prob_collision = p_copy.get_max_prob_collision(
-                env, scaling_factors
-            )
+            prob_collision = p_copy.get_max_prob_collision(env, scaling_factors)
             if prob_collision >= prob_threshold:
                 discard = True
                 break
@@ -50,16 +46,20 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
         plans_to_add.append((p_copy, neighbor_idx))
 
     elapsed = time.time() - start
-    print('Done p = {} at index {}, took {} seconds'.format(samples[p.head_idx], p.head_idx, elapsed))
+    print(
+        "Done p = {} at index {}, took {} seconds".format(
+            samples[p.head_idx], p.head_idx, elapsed
+        )
+    )
 
     return plans_to_add
 
 
-def process_dominated(searcher, p, plan_number):
-    if p.head_idx in searcher.P:
+def process_dominated(P, p, plan_number):
+    if p.head_idx in P:
         to_remove_from_P = set()
         to_remove_from_P_open = set()
-        for q in searcher.P[p.head_idx]:
+        for q in P[p.head_idx]:
             lower_cost = q.cost < p.cost
             enclosed = q.Xk_full <= p.Xk_full
             if lower_cost and enclosed:
@@ -93,12 +93,14 @@ class Searcher:
         p_init.set_gain(self.graph.planner.gain)
         p_init.set_init_est(P0)
         self.P_open.add((p_init, self.plan_number))
+        self.P_open_dict[self.plan_number] = p_init
         self.P[0] = set()
         self.P[0].add(deepcopy(p_init))
         self.G = self.P_open.copy()
 
     def clear(self):
         self.P_open = set()
+        self.P_open_dict = {}
         self.P = collections.defaultdict(set)
         self.G = set()
 
@@ -158,24 +160,16 @@ class Searcher:
         num_open_plans = len(self.P_open)
         to_remove_from_P_open = set()
         results = Parallel(n_jobs=n_jobs)(
-            delayed(process_dominated)(self, p, plan_number)
+            delayed(process_dominated)(self.P, p, plan_number)
             for p, plan_number in self.P_open
         )
-        print("results = {}".format(results))
-        print("P_open before = {}".format(self.P_open))
-        print("P before = {}".format(self.P))
-        P_open_dict = dict((y, x) for x, y in self.P_open)
         for head_idx, to_remove_from_P_open, to_remove_from_P in results:
-            print("to_remove_from_P_open = {}".format(to_remove_from_P_open))
-            print("to_remove_from_P = {}".format(to_remove_from_P))
             for plan_open_tuple in to_remove_from_P_open:
-                p_to_remove = P_open_dict[plan_open_tuple[1]]
+                p_to_remove = self.P_open_dict[plan_open_tuple[1]]
                 self.P_open.remove((p_to_remove, plan_open_tuple[1]))
                 self.P[head_idx].remove(p_to_remove)
             self.P[head_idx] -= to_remove_from_P
             self.P_open -= to_remove_from_P_open
-        print("P_open after = {}".format(self.P_open))
-        print("P after = {}".format(self.P))
         print(
             "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
         )
@@ -251,15 +245,23 @@ class Searcher:
         while self.P_open and not self.reached_goal(early_termination):
             print("Processing %d plans" % len(self.G))
             results = Parallel(n_jobs=n_jobs)(
-                delayed(process_plan)(self.graph.samples, self.graph.edges,
-                    self.graph.scales, self.graph.env,
-                    self.prob_threshold, scaling_factors, p) for p, _ in self.G
+                delayed(process_plan)(
+                    self.graph.samples,
+                    self.graph.edges,
+                    self.graph.scales,
+                    self.graph.env,
+                    self.prob_threshold,
+                    scaling_factors,
+                    p,
+                )
+                for p, _ in self.G
             )
             results = [pairs for x in results for pairs in x]
             for plan, neighbor_idx in results:
                 self.plan_number += 1
                 self.P[neighbor_idx].add(plan)
                 self.P_open.add((plan, self.plan_number))
+                self.P_open_dict[self.plan_number] = plan
 
             print(80 * "=")
             print("Done iteration %d" % i)
