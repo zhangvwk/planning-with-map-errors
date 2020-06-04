@@ -55,17 +55,15 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
     return plans_to_add
 
 
-def process_dominated(P_head_idx, p, plan_number):
+def process_dominated(P_head_idx, p_head_idx, p_cost, p_Xk_full, plan_number):
     if len(P_head_idx) > 0:
-        to_remove_from_P = set()
         to_remove_from_P_open = set()
         for q in P_head_idx:
-            lower_cost = q.cost < p.cost
-            enclosed = q.Xk_full <= p.Xk_full
+            lower_cost = q.cost < p_cost
+            enclosed = q.Xk_full <= p_Xk_full
             if lower_cost and enclosed:
-                to_remove_from_P_open.add((p, plan_number))
-                to_remove_from_P.add(p)
-        return p.head_idx, to_remove_from_P_open, to_remove_from_P
+                to_remove_from_P_open.add(plan_number)
+        return p_head_idx, to_remove_from_P_open
 
 
 class Searcher:
@@ -109,6 +107,19 @@ class Searcher:
         """
         self.goal_region_rec = goal_region
         self.goal_region = goal_region.as_poly["original"]
+        self.store_ratios()
+
+    def store_ratios(self):
+        self.ratios = np.zeros(len(self.graph.samples))
+        for idx, sample in enumerate(self.graph.samples[:, :2]):
+            self.ratios[idx] = self.get_dist_ratio(sample)
+
+    def get_dist_ratio(self, sample):
+        dist2origin = np.linalg.norm(sample - self.x_init[:2])
+        if np.abs(dist2origin) < 1e-16:
+            return 0
+        dist2goal = self.goal_region_rec.get_min_dist(Point(sample[0], sample[1]))[0]
+        return (dist2origin + dist2goal) / dist2origin
 
     def is_valid_goal(self, config="worst", verbose=True):
         try:
@@ -160,16 +171,16 @@ class Searcher:
         num_open_plans = len(self.P_open)
         to_remove_from_P_open = set()
         results = Parallel(n_jobs=n_jobs)(
-            delayed(process_dominated)(self.P[p.head_idx], p, plan_number)
+            delayed(process_dominated)(
+                self.P[p.head_idx], p.head_idx, p.cost, p.Xk_full, plan_number
+            )
             for p, plan_number in self.P_open
         )
-        for head_idx, to_remove_from_P_open, to_remove_from_P in results:
-            for plan_open_tuple in to_remove_from_P_open:
-                p_to_remove = self.P_open_dict[plan_open_tuple[1]]
-                self.P_open.remove((p_to_remove, plan_open_tuple[1]))
+        for head_idx, to_remove_from_P_open in results:
+            for plan_number in to_remove_from_P_open:
+                p_to_remove = self.P_open_dict[plan_number]
+                self.P_open.remove((p_to_remove, plan_number))
                 self.P[head_idx].remove(p_to_remove)
-            self.P[head_idx] -= to_remove_from_P
-            self.P_open -= to_remove_from_P_open
         print(
             "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
         )
@@ -182,23 +193,15 @@ class Searcher:
             print("num_open_plans = {}".format(num_open_plans))
             P_open_sorted = sorted(
                 self.P_open,
-                key=lambda p_tuple: p_tuple[0].cost
-                * self.get_dist_ratio(p_tuple[0].head_idx),
+                key=lambda p_tuple: p_tuple[0].cost * self.ratios[p_tuple[0].head_idx],
             )
             num_open_plans_to_remove = int(portion * num_open_plans) + 1
             self.P_open = set(P_open_sorted[:-num_open_plans_to_remove])
             print("Pruned {} plans in P_open.".format(num_open_plans_to_remove))
 
-    def get_dist_ratio(self, head_idx):
-        head_location = self.graph.samples[head_idx, :2]
-        dist2origin = np.linalg.norm(head_location - self.x_init[:2])
-        dist2goal = self.goal_region_rec.get_min_dist(
-            Point(head_location[0], head_location[1])
-        )[0]
-        ratio = (dist2origin + dist2goal) / dist2origin
-        return ratio
-
     def prune(self, i):
+        if self.pruning_coeff == 1:
+            self.G = self.P_open.copy()
         self.G = set()
         for p, plan_number in self.P_open:
             if p.cost <= i * self.pruning_coeff:
@@ -256,18 +259,20 @@ class Searcher:
                 )
                 for p, _ in self.G
             )
-            results = [pairs for x in results for pairs in x]
-            for plan, neighbor_idx in results:
-                self.plan_number += 1
-                self.P[neighbor_idx].add(plan)
-                self.P_open.add((plan, self.plan_number))
-                self.P_open_dict[self.plan_number] = plan
+            for result in results:
+                for plan, neighbor_idx in result:
+                    self.plan_number += 1
+                    self.P[neighbor_idx].add(plan)
+                    self.P_open.add((plan, self.plan_number))
+                    self.P_open_dict[self.plan_number] = plan
 
             print(80 * "=")
             print("Done iteration %d" % i)
             print(80 * "=")
+            t1 = time.time()
             # self.remove_dominated()
             self.remove_dominated(n_jobs=n_jobs)
+            print("remove_dominated took {} s.".format(time.time() - t1))
             self.P_open -= self.G
             i += 1
             self.prune(i)
