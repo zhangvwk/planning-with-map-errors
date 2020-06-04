@@ -12,7 +12,9 @@ from utils import GeoTools
 from shapes import Point
 
 
-def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p):
+def process_plan(
+    samples, edges, scales, env, prob_threshold, scaling_factors, p, P
+):
     print(
         "========== p = {} at index {} ==========".format(
             samples[p.head_idx], p.head_idx
@@ -28,6 +30,7 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
     for neighbor_idx, v in edges[p.head_idx].items():
         if neighbor_idx in set(p.path_indices):
             continue
+        dominated = False
         discard = False
         to_neighbor_cost, to_neighbor_path = v
         print("----- neighbor_idx = {} -----".format(neighbor_idx))
@@ -43,7 +46,17 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
         if discard:
             continue
         p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
-        plans_to_add.append((p_copy, neighbor_idx))
+
+        if neighbor_idx in P:
+            for q in P[neighbor_idx]:
+                lower_cost = q.cost < p_copy.cost
+                enclosed = q.Xk_full <= p_copy.Xk_full
+                if lower_cost and enclosed:
+                    dominated = True
+                    break
+
+        if not dominated:
+            plans_to_add.append((p_copy, neighbor_idx))
 
     elapsed = time.time() - start
     print(
@@ -53,6 +66,49 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
     )
 
     return plans_to_add
+
+
+# def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p):
+#     print(
+#         "========== p = {} at index {} ==========".format(
+#             samples[p.head_idx], p.head_idx
+#         )
+#     )
+#     print("NEIGHBORS: {}".format(edges[p.head_idx].keys()))
+#     print("p.path_indices = {}".format(p.path_indices))
+
+#     start = time.time()
+
+#     plans_to_add = []
+
+#     for neighbor_idx, v in edges[p.head_idx].items():
+#         if neighbor_idx in set(p.path_indices):
+#             continue
+#         discard = False
+#         to_neighbor_cost, to_neighbor_path = v
+#         print("----- neighbor_idx = {} -----".format(neighbor_idx))
+#         p_copy = deepcopy(p)
+#         for i, sub_neighbor in enumerate(to_neighbor_path[1:]):
+#             p_copy.add_point(
+#                 env, sub_neighbor, scales[p.head_idx][neighbor_idx][i],
+#             )
+#             prob_collision = p_copy.get_max_prob_collision(env, scaling_factors)
+#             if prob_collision >= prob_threshold:
+#                 discard = True
+#                 break
+#         if discard:
+#             continue
+#         p_copy.update_info(neighbor_idx, to_neighbor_cost, to_neighbor_path)
+#         plans_to_add.append((p_copy, neighbor_idx))
+
+#     elapsed = time.time() - start
+#     print(
+#         "Done p = {} at index {}, took {} seconds".format(
+#             samples[p.head_idx], p.head_idx, elapsed
+#         )
+#     )
+
+#     return plans_to_add
 
 
 def process_dominated(P_head_idx, p_head_idx, p_cost, p_Xk_full, plan_number):
@@ -167,25 +223,25 @@ class Searcher:
     #     if prune:
     #         self.prune_alternate()
 
-    def remove_dominated(self, n_jobs, prune=True):
-        num_open_plans = len(self.P_open)
-        to_remove_from_P_open = set()
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(process_dominated)(
-                self.P[p.head_idx], p.head_idx, p.cost, p.Xk_full, plan_number
-            )
-            for p, plan_number in self.P_open
-        )
-        for head_idx, to_remove_from_P_open in results:
-            for plan_number in to_remove_from_P_open:
-                p_to_remove = self.P_open_dict[plan_number]
-                self.P_open.remove((p_to_remove, plan_number))
-                self.P[head_idx].remove(p_to_remove)
-        print(
-            "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
-        )
-        if prune:
-            self.prune_alternate()
+    # def remove_dominated(self, n_jobs, prune=True):
+    #     num_open_plans = len(self.P_open)
+    #     to_remove_from_P_open = set()
+    #     results = Parallel(n_jobs=n_jobs)(
+    #         delayed(process_dominated)(
+    #             self.P[p.head_idx], p.head_idx, p.cost, p.Xk_full, plan_number
+    #         )
+    #         for p, plan_number in self.P_open
+    #     )
+    #     for head_idx, to_remove_from_P_open in results:
+    #         for plan_number in to_remove_from_P_open:
+    #             p_to_remove = self.P_open_dict[plan_number]
+    #             self.P_open.remove((p_to_remove, plan_number))
+    #             self.P[head_idx].remove(p_to_remove)
+    #     print(
+    #         "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
+    #     )
+    #     if prune:
+    #         self.prune_alternate()
 
     def prune_alternate(self, portion=0.1):
         num_open_plans = len(self.P_open)
@@ -242,7 +298,7 @@ class Searcher:
         n_cpu = multiprocessing.cpu_count()
         n_jobs = max(n_cpu - 2, 1)
         print("I have detected %d cores, I am going to use %d" % (n_cpu, n_jobs))
-        time.sleep(5)  # sleep for 5 s so that I can read it
+        time.sleep(2)  # sleep for 5 s so that I can read it
 
         i = 0  # counter for iteration
         while self.P_open and not self.reached_goal(early_termination):
@@ -256,9 +312,27 @@ class Searcher:
                     self.prob_threshold,
                     scaling_factors,
                     p,
+                    {
+                        key: self.P[key]
+                        for key in self.P
+                        if key in self.graph.edges[p.head_idx]
+                    },
                 )
                 for p, _ in self.G
             )
+            # results = Parallel(n_jobs=n_jobs)(
+            #     delayed(process_plan)(
+            #         self.graph.samples,
+            #         self.graph.edges,
+            #         self.graph.scales,
+            #         self.graph.env,
+            #         self.prob_threshold,
+            #         scaling_factors,
+            #         p,
+            #     )
+            #     for p, _ in self.G
+            # )
+            print("results = {}".format(results))
             for result in results:
                 for plan, neighbor_idx in result:
                     self.plan_number += 1
@@ -269,10 +343,10 @@ class Searcher:
             print(80 * "=")
             print("Done iteration %d" % i)
             print(80 * "=")
-            t1 = time.time()
-            # self.remove_dominated()
-            self.remove_dominated(n_jobs=n_jobs)
-            print("remove_dominated took {} s.".format(time.time() - t1))
+            # t1 = time.time()
+            # # self.remove_dominated()
+            # self.remove_dominated(n_jobs=n_jobs)
+            # print("remove_dominated took {} s.".format(time.time() - t1))
             self.P_open -= self.G
             i += 1
             self.prune(i)
