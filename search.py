@@ -55,6 +55,19 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
     return plans_to_add
 
 
+def process_dominated(searcher, p, plan_number):
+    if p.head_idx in searcher.P:
+        to_remove_from_P = set()
+        to_remove_from_P_open = set()
+        for q in searcher.P[p.head_idx]:
+            lower_cost = q.cost < p.cost
+            enclosed = q.Xk_full <= p.Xk_full
+            if lower_cost and enclosed:
+                to_remove_from_P_open.add((p, plan_number))
+                to_remove_from_P.add(p)
+        return p.head_idx, to_remove_from_P_open, to_remove_from_P
+
+
 class Searcher:
     def __init__(self, graph, pruning_coeff=0.5):
         self.graph = graph
@@ -121,20 +134,48 @@ class Searcher:
             )
         return False
 
-    def remove_dominated(self, prune=True):
+    # def remove_dominated(self, prune=True):
+    #     num_open_plans = len(self.P_open)
+    #     to_remove_from_P_open = set()
+    #     for p, plan_number in self.P_open:
+    #         if p.head_idx in self.P:
+    #             to_remove_from_P = set()
+    #             for q in self.P[p.head_idx]:
+    #                 lower_cost = q.cost < p.cost
+    #                 enclosed = q.Xk_full <= p.Xk_full
+    #                 if lower_cost and enclosed:
+    #                     to_remove_from_P_open.add((p, plan_number))
+    #                     to_remove_from_P.add(p)
+    #             self.P[p.head_idx] -= to_remove_from_P
+    #     self.P_open -= to_remove_from_P_open
+    #     print(
+    #         "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
+    #     )
+    #     if prune:
+    #         self.prune_alternate()
+
+    def remove_dominated(self, n_jobs, prune=True):
         num_open_plans = len(self.P_open)
         to_remove_from_P_open = set()
-        for p, plan_number in self.P_open:
-            if p.head_idx in self.P:
-                to_remove_from_P = set()
-                for q in self.P[p.head_idx]:
-                    lower_cost = q.cost < p.cost
-                    enclosed = q.Xk_full <= p.Xk_full
-                    if lower_cost and enclosed:
-                        to_remove_from_P_open.add((p, plan_number))
-                        to_remove_from_P.add(p)
-                self.P[p.head_idx] -= to_remove_from_P
-        self.P_open -= to_remove_from_P_open
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(process_dominated)(self, p, plan_number)
+            for p, plan_number in self.P_open
+        )
+        print("results = {}".format(results))
+        print("P_open before = {}".format(self.P_open))
+        print("P before = {}".format(self.P))
+        P_open_dict = dict((y, x) for x, y in self.P_open)
+        for head_idx, to_remove_from_P_open, to_remove_from_P in results:
+            print("to_remove_from_P_open = {}".format(to_remove_from_P_open))
+            print("to_remove_from_P = {}".format(to_remove_from_P))
+            for plan_open_tuple in to_remove_from_P_open:
+                p_to_remove = P_open_dict[plan_open_tuple[1]]
+                self.P_open.remove((p_to_remove, plan_open_tuple[1]))
+                self.P[head_idx].remove(p_to_remove)
+            self.P[head_idx] -= to_remove_from_P
+            self.P_open -= to_remove_from_P_open
+        print("P_open after = {}".format(self.P_open))
+        print("P after = {}".format(self.P))
         print(
             "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
         )
@@ -223,7 +264,8 @@ class Searcher:
             print(80 * "=")
             print("Done iteration %d" % i)
             print(80 * "=")
-            self.remove_dominated()
+            # self.remove_dominated()
+            self.remove_dominated(n_jobs=n_jobs)
             self.P_open -= self.G
             i += 1
             self.prune(i)
