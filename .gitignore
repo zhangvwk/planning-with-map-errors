@@ -1,2 +1,5 @@
 *.pyc
 *checkpoint.ipynb
+/job.*
+/logs
+/run*.sh
