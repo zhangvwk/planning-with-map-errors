@@ -110,7 +110,7 @@ class Graph:
 
     def build(
         self,
-        n,
+        n=None,
         r=None,
         max_neighbors=6,
         config="worst",
@@ -129,7 +129,7 @@ class Graph:
         if r is None:
             r = self.get_heuristic_r(n)
         self.r = r
-        not_sampled = np.all(np.abs(self.samples - np.zeros((1, self.dim))) < 1e-5)
+        not_sampled = len(self.samples) <= 1
         if not_sampled:
             self.init_samples()
             t0 = time.time()
@@ -188,22 +188,39 @@ class Graph:
         for dest_idx in self.skdtree.get_knn(
             self.samples[src_idx], k=min(max_neighbors + 1, len(self.samples))
         )[1][1:]:
-            cost, traj, controls = self.compute_path(
-                self.samples[src_idx], self.samples[dest_idx], tol
-            )
-            if cost <= r and not self.intersects(traj, config):
-                self.edges[src_idx][dest_idx] = (cost, traj)
-                self.controls[src_idx][dest_idx] = controls
-                controls_norms = np.linalg.norm(controls, axis=1)
-                motion_noise_max = np.diag(
-                    np.abs(traj[1] - traj[0]) * motion_noise_ratio
+            if dest_idx not in self.edges[src_idx]:
+                cost, traj, controls = self.compute_path(
+                    self.samples[src_idx], self.samples[dest_idx], tol
                 )
-                control_scales = np.concatenate(
-                    (np.zeros(1), controls_norms / np.max(controls_norms))
-                )
-                self.Qs_scaled[src_idx][dest_idx] = [
-                    control_scale * motion_noise_max for control_scale in control_scales
-                ]
+                if cost <= r and not self.intersects(traj, config):
+                    self.add_edge(
+                        src_idx, dest_idx, cost, traj, controls, motion_noise_ratio
+                    )
+                    # Add the edge the other way if not already
+                    if src_idx not in self.edges[dest_idx]:
+                        cost_rev, traj_rev, controls_rev = self.compute_path(
+                            self.samples[dest_idx], self.samples[src_idx], tol
+                        )
+                        self.add_edge(
+                            dest_idx,
+                            src_idx,
+                            cost_rev,
+                            traj_rev,
+                            controls_rev,
+                            motion_noise_ratio,
+                        )
+
+    def add_edge(self, src_idx, dest_idx, cost, traj, controls, motion_noise_ratio):
+        self.edges[src_idx][dest_idx] = (cost, traj)
+        self.controls[src_idx][dest_idx] = controls
+        controls_norms = np.linalg.norm(controls, axis=1)
+        motion_noise_max = np.diag(np.abs(traj[1] - traj[0]) * motion_noise_ratio)
+        control_scales = np.concatenate(
+            (np.zeros(1), controls_norms / np.max(controls_norms))
+        )
+        self.Qs_scaled[src_idx][dest_idx] = [
+            control_scale * motion_noise_max for control_scale in control_scales
+        ]
 
     def compute_path(self, u, v, tol):
         """Wrapper around the planner attribute."""
