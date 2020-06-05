@@ -1,9 +1,10 @@
 import numpy as np
 import polytope as pc
-import math
+import math, operator
 from scipy.special import erf, erfinv
 from shapely.geometry import Polygon
 from pypoman import compute_polytope_vertices
+from functools import reduce
 
 SCALING_FOR_INCLUSION = np.sqrt(2) * erfinv(0.9 ** 0.5)
 
@@ -18,6 +19,11 @@ class Zonotope:
         self.G = generators
         self.Sig = cov
         self._H_is_valid = False
+        if len(self.G.shape)==1:
+            self.e = 1
+        else:
+            self.e = self.G.shape[1]
+
         assert self.G.shape[0] == self.c.shape[0]
         assert self.G.shape[0] == self.Sig.shape[0]
         assert self.G.shape[0] == self.Sig.shape[1]
@@ -27,17 +33,26 @@ class Zonotope:
 
     def __add__(self, other):
         c = self.c + other.c
-        G = np.hstack(
-            (self.G.reshape(self.G.shape[0], -1), other.G.reshape(other.G.shape[0], -1))
-        )
+
+        etot = self.e + other.e
+        n = self.G.shape[0]
+        G = np.zeros((n, etot))
+        G[:,:self.e] = self.G.reshape(n, -1)
+        G[:,self.e:] = other.G.reshape(n, -1)
+
         Sig = self.Sig + other.Sig
+
         return Zonotope(c, G, Sig)
 
     def __le__(self, other):
         """Return True if self is enclosed by other."""
-        XY = pc.extreme(self.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_poly())
+        v = self.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_V()
         A, b = other.get_confidence_sets(SCALING_FOR_INCLUSION)[0].to_H()
-        n_points = XY.shape[0]
+        n_points = len(v)
+        XY = np.zeros((n_points, self.c.shape[0]))
+        for i in range(n_points):
+            XY[i,:] = v[i]
+
         ineq = A.dot(XY.T)
         for i in range(n_points):
             if not np.all(ineq[:, i] < b):
@@ -71,29 +86,23 @@ class Zonotope:
         e = self.G.shape[1]
         assert n == 2  # what follows is only valid in 2D
         Cp = np.zeros((e, n))
-        dp = np.zeros((e,))
-        dm = np.zeros((e,))
-        for i in range(e):
-            g = self.G[:, i]  # extract generator i
-            gg = np.array([g[1], -g[0]])  # compute the cross product nX()
-            if np.linalg.norm(gg) < 1e-10:
-                Cp[i:,:] = 0
-                dp[i] = 1
-                dm[i] = 1
-                continue
-            Cpi = gg / np.linalg.norm(gg)
-            delta_di = 0
-            for j in range(e):
-                delta_di += np.fabs(
-                    Cpi.dot(self.G[:, j])
-                )  # dot product with all generators
+        dp = np.ones((e,))
+        dm = np.ones((e,))
 
-            Cp[i, :] = Cpi
-            dp[i] = Cpi.dot(self.c) + delta_di
-            dm[i] = -Cpi.dot(self.c) + delta_di
+        gg = np.zeros(self.G.shape)
+        gg[0,:] = self.G[1,:]
+        gg[1,:] = -self.G[0,:]
+        ggnorm = np.linalg.norm(gg, axis=0)
+
+        i_nonzero = np.ma.masked_where(ggnorm > 1e-10, ggnorm).mask
+        Cp[i_nonzero,:] = np.transpose(gg[:,i_nonzero] / ggnorm[i_nonzero])
+
+        deltas = np.sum(np.fabs(Cp.dot(self.G)), axis=1)
+        dp[i_nonzero] = Cp.dot(self.c)[i_nonzero] + deltas[i_nonzero]
+        dm[i_nonzero] = -Cp.dot(self.c)[i_nonzero] + deltas[i_nonzero]
 
         # store the H-representation and allow to reuse it until it is not valid anymore
-        self.A = np.vstack((Cp, -Cp))
+        self.A = np.concatenate((Cp, -Cp), axis=0)
         self.b = np.concatenate((dp, dm))
         self._H_is_valid = True
         return self.A, self.b
@@ -101,6 +110,22 @@ class Zonotope:
     def to_poly(self):
         A, b = self.to_H()
         return pc.Polytope(A, b)
+
+    def to_polygon(self):
+        A, b = self.to_H()
+        vertices = compute_polytope_vertices(A, b)
+        # sort those vertices
+        center = tuple(map(operator.truediv, reduce(lambda x, y: map(operator.add, x, y), vertices), [len(vertices)] * 2))
+        vertices.sort(key=lambda coord: (-135 - math.degrees(math.atan2(*tuple(map(operator.sub, coord, center))[::-1]))) % 360)
+        return Polygon(vertices)
+
+    def to_V(self):
+        A, b = self.to_H()
+        vertices = compute_polytope_vertices(A, b)
+        # sort those vertices
+        center = tuple(map(operator.truediv, reduce(lambda x, y: map(operator.add, x, y), vertices), [len(vertices)] * 2))
+        vertices.sort(key=lambda coord: (-135 - math.degrees(math.atan2(*tuple(map(operator.sub, coord, center))[::-1]))) % 360)
+        return vertices
 
     def reduce(self, target_order=1.0):
         """Reduce the zonotope by replacing 4 well chosen generators by 2 generators
@@ -160,8 +185,8 @@ class Zonotope:
         scaling_factors = np.array(scaling_factors)
         k = scaling_factors.shape[0]
 
-        # calling pc.extreme on this one is fast, maybe because it is a plain reactangle?
-        X = Polygon(pc.extreme(X.to_poly()))
+        # convert obstacle to polygon
+        X = X.to_polygon()
 
         confid_sets = self.get_confidence_sets(scaling_factors)
         # append m=0 to the set of scaling factors
@@ -176,10 +201,7 @@ class Zonotope:
         # compute intersection volumes
         V = np.zeros((k,))
         for i in range(k):
-            A, b = confid_sets[i].to_H()
-            vertices = compute_polytope_vertices(A, b) # fast C code for vertex enumeration
-            vertices.sort(key=lambda c:math.atan2(c[0], c[1])) # sort those vertices
-            X2 = Polygon(vertices) # construct a Polygon
+            X2 = confid_sets[i].to_polygon()
             V[i] = X2.intersection(X).area # this is faster than intersect of polytope
 
         # compute intersection prob
