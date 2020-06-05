@@ -15,9 +15,9 @@ def area(x, y):
 
 class Zonotope:
     def __init__(self, center, generators, cov):
-        self.c = center
-        self.G = generators
-        self.Sig = cov
+        self.c = np.copy(center)
+        self.G = np.copy(generators)
+        self.Sig = np.copy(cov)
         self._H_is_valid = False
         if len(self.G.shape)==1:
             self.e = 1
