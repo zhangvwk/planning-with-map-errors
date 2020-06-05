@@ -104,8 +104,8 @@ class NuValues:
         # should never change, number of lines seen at n
         self._nlines = Sn.size
         self._values = {}
-        self._w = w
-        self._cov = cov
+        self._w = np.copy(w)
+        self._cov = np.copy(cov)
         self._nlines_tot = nlines_tot
 
         self._bitmask = PlanUtils.init_bitarray(nlines_tot)
@@ -410,7 +410,8 @@ class Plan:
         know = self.k % (self.kmax + 1)
         n_extr = len(self.Sn[know])
         Xks = {}
-        self.Xk_full = deepcopy(self.Nu_full[1])
+        src = self.Nu_full[1]
+        self.Xk_full = Zonotope(src.c, src.G, src.Sig)
         self.Xk_full.scale(self.d[1])
         for n1 in range(max(2, self.k + 2 - self.kmax), self.k + 1):
             n = n1 % (self.kmax + 1)
@@ -422,11 +423,13 @@ class Plan:
 
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
-            Xks[configID] = deepcopy(self.Nu[1].at_config(self.Sn[know], configID))
+            src = self.Nu[1].at_config(self.Sn[know], configID)
+            Xks[configID] = Zonotope(src.c, src.G, src.Sig)
             Xks[configID].scale(self.d[1])
             for n1 in range(max(2, self.k + 2 - self.kmax), self.k + 1):
                 n = n1 % (self.kmax + 1)
-                tmp = deepcopy(self.Nu[n].at_config(self.Sn[know], configID))
+                src = self.Nu[n].at_config(self.Sn[know], configID)
+                tmp = Zonotope(src.c, src.G, src.Sig)
                 tmp.scale(self.d[n])
                 Xks[configID] += tmp
             Xks[configID].c += center_offset
