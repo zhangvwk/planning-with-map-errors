@@ -11,7 +11,7 @@ from lqr import LQRPlanner
 from search import Searcher
 from plan import PlanUtils
 
-sys.path.append('../../')
+sys.path.append("../../")
 
 """ Environment """
 x_lims = [-10, 10]
@@ -48,7 +48,7 @@ x_range = np.array([x_lims, y_lims])
 tol = 1e-2
 g = Graph(x0, x_range, env, lqr_planner)
 g.clear()
-g.set_samples(np.load("samples_env1.dat"))
+g.set_samples(np.load("samples_env1.dat", allow_pickle=True))
 g.build(r=10, max_neighbors=6, tol=tol, motion_noise_ratio=0.05)
 
 """ Initial estimates """
