@@ -10,6 +10,7 @@ from lqr import LQRPlanner
 from search import Searcher
 from plan import PlanUtils
 
+""" Environment """
 x_lims = [-10, 10]
 y_lims = [-12, 10]
 env = Environment2D(x_lims, y_lims)
@@ -51,7 +52,7 @@ g.set_samples(np.load("samples_env2.dat", allow_pickle=True))
 g.build(r=10, max_neighbors=5, tol=tol, motion_noise_ratio=0.05)
 
 """ Initial estimates """
-# We are confident about our initial estimate up to 5% of the environment size.
+# We are confident about our initial estimate up to 0.5% of the environment size.
 init_confidence = 0.5 / 100
 
 x_est_0 = x0

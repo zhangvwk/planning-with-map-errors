@@ -183,7 +183,6 @@ class Graph:
         range_y = self.env.x_range[1][1] - self.env.x_range[1][0]
         env_scale = range_x * range_y
         grid_res = env_scale / n
-        print("grid_res = {}".format(grid_res))
         x = np.arange(
             self.env.x_range[0][0] + 0.01 * range_x,
             self.env.x_range[0][1] - 0.01 * range_x,
