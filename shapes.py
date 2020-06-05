@@ -383,7 +383,7 @@ class Rectangle(Polygon):
             rec_poly = self.to_poly(config)
         A = rec_poly.A
         b = rec_poly.b
-        return np.all(A.dot(p.as_array()) <= b)
+        return np.all(A.dot(p.as_array()) - b <= 1e-5)
 
     def is_intersected(self, line, config="worst"):
         """Return True if self is intersected by a line.
