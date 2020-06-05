@@ -151,25 +151,63 @@ class Graph:
     def fromarray(self, array):
         return Point(array[0], array[1])
 
-    def sample_free(self, n, config, goal_region=None):
+    def sample_free(self, n, config, goal_region=None, deterministic=True):
         """Sample n nodes in the free space."""
-        num_added = 0
-        new_samples = []
-        while num_added < n:
-            try:
-                sample = GeoTools.sample_in_range(self.x_range)
-                if num_added == 0 and goal_region is not None:
-                    if not goal_region.contains(sample):
-                        raise NotInGoalError
-                if not self.env.contains(self.fromarray(sample), config):
-                    new_samples.append(sample)
-                    num_added += 1
-            except NotInGoalError:
-                pass
-        self.add_sample(new_samples)
+        if deterministic and self.dim == 2:
+            new_samples = self.get_deterministic_samples(n, config, goal_region)
+        else:
+            self.num_added = 0
+            new_samples = []
+            while self.num_added < n:
+                try:
+                    sample = GeoTools.sample_in_range(self.x_range)
+                    if self.num_added == 0 and goal_region is not None:
+                        if not goal_region.contains(sample):
+                            raise NotInGoalError
+                    if not self.env.contains(self.fromarray(sample), config):
+                        new_samples.append(sample)
+                        self.num_added += 1
+                except NotInGoalError:
+                    pass
+        self.add_samples(new_samples)
+        print("Added {} samples.".format(self.num_added))
         self.update_kdtree()
 
-    def add_sample(self, new_samples):
+    def get_deterministic_samples(
+        self, n, config, goal_region=None, grid_noise_ratio=0.01
+    ):
+        """Deterministically sample nodes in the free space from a fixed size meshgrid.
+        WARNING: Assumes 2D state space.
+        """
+        range_x = self.env.x_range[0][1] - self.env.x_range[0][0]
+        range_y = self.env.x_range[1][1] - self.env.x_range[1][0]
+        env_scale = range_x * range_y
+        grid_res = env_scale / n
+        print("grid_res = {}".format(grid_res))
+        x = np.arange(
+            self.env.x_range[0][0] + 0.01 * range_x,
+            self.env.x_range[0][1] - 0.01 * range_x,
+            grid_res,
+        )
+        y = np.arange(
+            self.env.x_range[1][0] + 0.01 * range_y,
+            self.env.x_range[1][1] - 0.01 * range_y,
+            grid_res,
+        )
+        xs, ys = np.meshgrid(x, y)
+        self.num_added = 0
+        new_samples = []
+        for i in range(xs.shape[0]):
+            for j in range(xs.shape[1]):
+                sample = np.array([xs[i, j], ys[i, j]]) + np.random.multivariate_normal(
+                    np.zeros(2), grid_noise_ratio * grid_res * np.eye(2)
+                )
+                if not self.env.contains(self.fromarray(sample), config):
+                    new_samples.append(sample)
+                    self.num_added += 1
+        return new_samples
+
+    def add_samples(self, new_samples):
         """Add a sample to the current set of samples."""
         self.samples = np.vstack((self.samples, new_samples))
 
@@ -215,6 +253,11 @@ class Graph:
         self.controls[src_idx][dest_idx] = controls
         controls_norms = np.linalg.norm(controls, axis=1)
         motion_noise_max = np.diag(np.abs(traj[1] - traj[0]) * motion_noise_ratio)
+        if np.any(np.max(controls_norms)) < 1e-16:
+            print("src_idx = {}".format(src_idx))
+            print("dest_idx = {}".format(dest_idx))
+            print("controls_norms = {}".format(controls_norms))
+            print("np.max(controls_norms) = {}".format(np.max(controls_norms)))
         control_scales = np.concatenate(
             (np.zeros(1), controls_norms / np.max(controls_norms))
         )
