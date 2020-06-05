@@ -17,7 +17,6 @@ class Simulator:
         self.env = env
         self.A = None
         self.B = None
-        self.Q = None
         self.R = None
         self.K = None
         self.C = None
@@ -28,10 +27,9 @@ class Simulator:
         self.gain_ready = False
         self.est_ready = False
 
-    def set_motion(self, A, B, Q):
+    def set_motion(self, A, B):
         self.A = A
         self.B = B
-        self.Q = Q
         self.motion_ready = True
 
     def set_obs(self, R):
@@ -52,11 +50,11 @@ class Simulator:
             self.motion_ready and self.obs_ready and self.gain_ready and self.est_ready
         )
 
-    def simulate_state(self, x, u, scale=1):
+    def simulate_state(self, x, u, Q_scaled):
         return (
             self.A.dot(x)
             + self.B.dot(u)
-            + np.random.multivariate_normal(np.zeros(self.Q.shape[0]), self.Q) * scale
+            + np.random.multivariate_normal(np.zeros(Q_scaled.shape[0]), Q_scaled)
         )
 
     def get_obs_matrices(self, x, conf_factor=3):
@@ -78,9 +76,9 @@ class Simulator:
     def get_controls(self, u_nom, x_est, x_nom):
         return u_nom - self.K.dot(x_est - x_nom)
 
-    def predict(self, x_est, u, P_est):
+    def predict(self, x_est, u, P_est, Q_scaled):
         x_bar = self.A.dot(x_est) + self.B.dot(u)
-        P_bar = (self.A.dot(P_est)).dot(self.A.T) + self.Q
+        P_bar = (self.A.dot(P_est)).dot(self.A.T) + Q_scaled
         return x_bar, P_bar
 
     def get_kalman_gain(self, P_bar, C, Rhat):
@@ -91,7 +89,7 @@ class Simulator:
         P_est = (np.eye(L.shape[0]) - L.dot(C)).dot(P_bar)
         return x_est, P_est
 
-    def rollout(self, x0, x_noms, u_noms, scales=None):
+    def rollout(self, x0, x_noms, u_noms, Qs_scaled):
         assert self.is_initialized()
         x = x0
         xs = [x]
@@ -99,13 +97,11 @@ class Simulator:
         P_est = self.P_est_0
         x_ests = [x_est]
         x_bars = []
-        if scales is None:
-            scales = np.ones(len(x_noms))
         collision = False
         for k in range(len(x_noms)):
             u = self.get_controls(u_noms[k], x_est, x_noms[k])
-            x_bar, P_bar = self.predict(x_est, u, P_est)
-            x = self.simulate_state(x, u, scales[k])
+            x_bar, P_bar = self.predict(x_est, u, P_est, Qs_scaled[k])
+            x = self.simulate_state(x, u, Qs_scaled[k])
             if self.env.contains(Point(x[0], x[1]), config="actual"):
                 collision = True
             C, b_actual, b_half, e, Rhat = self.get_obs_matrices(x)
@@ -120,7 +116,7 @@ class Simulator:
             x_bars.append(x_bar)
         return xs, x_ests, x_bars, collision
 
-    def run(self, iters, x0, S, x_noms, u_noms, scales=None, verbose=True):
+    def run(self, iters, x0, S, x_noms, u_noms, Qs_scaled, verbose=True):
         xs = {}
         x_ests = {}
         x_bars = {}
@@ -130,7 +126,7 @@ class Simulator:
                 x0 + np.random.multivariate_normal(np.zeros(S.shape[0]), S),
                 x_noms,
                 u_noms,
-                scales,
+                Qs_scaled,
             )
             num_collisions += int(collision)
         prob_collision = float(num_collisions / iters)

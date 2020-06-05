@@ -88,7 +88,7 @@ class Graph:
         """
         self.edges = collections.defaultdict(lambda: collections.defaultdict(tuple))
         self.controls = collections.defaultdict(lambda: collections.defaultdict())
-        self.scales = collections.defaultdict(lambda: collections.defaultdict(float))
+        self.Qs_scaled = collections.defaultdict(lambda: collections.defaultdict(float))
 
     def update_kdtree(self):
         """Update internal KDTree."""
@@ -109,7 +109,14 @@ class Graph:
         return eps * (1 + 3.5 * eps)
 
     def build(
-        self, n, r=None, max_neighbors=6, config="worst", tol=1e-2, timing=True,
+        self,
+        n,
+        r=None,
+        max_neighbors=6,
+        config="worst",
+        tol=1e-2,
+        timing=True,
+        motion_noise_ratio=0.05,
     ):
         """Build the graph.
         Args:
@@ -134,9 +141,9 @@ class Graph:
         t2 = time.time()
         if max_neighbors is None:
             max_neighbors = len(self.samples)
-        self.connect(0, r, max_neighbors, config, tol)
+        self.connect(0, r, max_neighbors, config, tol, motion_noise_ratio)
         for src_idx in range(len(self.samples)):
-            self.connect(src_idx, r, max_neighbors, config, tol)
+            self.connect(src_idx, r, max_neighbors, config, tol, motion_noise_ratio)
         t3 = time.time()
         if timing:
             print("Connecting took: {:0.2f} s.".format(t3 - t2))
@@ -166,7 +173,7 @@ class Graph:
         """Add a sample to the current set of samples."""
         self.samples = np.vstack((self.samples, new_samples))
 
-    def connect(self, src_idx, r, max_neighbors, config, tol):
+    def connect(self, src_idx, r, max_neighbors, config, tol, motion_noise_ratio):
         """Connect src_idx'th node to any other node in the graph,
         in the limit of a total of max_neighbors, for which the optimal
         cost is less than r and for which the optimal trajectory lies in the free space.
@@ -188,9 +195,15 @@ class Graph:
                 self.edges[src_idx][dest_idx] = (cost, traj)
                 self.controls[src_idx][dest_idx] = controls
                 controls_norms = np.linalg.norm(controls, axis=1)
-                self.scales[src_idx][dest_idx] = np.concatenate(
+                motion_noise_max = np.diag(
+                    np.abs(traj[1] - traj[0]) * motion_noise_ratio
+                )
+                control_scales = np.concatenate(
                     (np.zeros(1), controls_norms / np.max(controls_norms))
                 )
+                self.Qs_scaled[src_idx][dest_idx] = [
+                    control_scale * motion_noise_max for control_scale in control_scales
+                ]
 
     def compute_path(self, u, v, tol):
         """Wrapper around the planner attribute."""

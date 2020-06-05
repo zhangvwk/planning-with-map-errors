@@ -225,7 +225,6 @@ class Plan:
         # Estimation matrices
         self.A = None
         self.B = None
-        self.Q = None
         self.Q_scaled = [None] * (self.kmax + 1)
         self.K = None
         self.C = None
@@ -254,10 +253,9 @@ class Plan:
         self.Nu_full = [None] * (self.kmax + 1)
         self.Nu_full[0] = Zonotope(np.zeros(w.shape), w, self.R * np.eye(w.shape[0]))
 
-    def set_motion(self, A, B, Q):
+    def set_motion(self, A, B):
         self.A = A
         self.B = B
-        self.Q = Q
         self.motion_ready = True
 
     def set_gain(self, K):
@@ -284,7 +282,7 @@ class Plan:
         self.cost += cost_to_add
         self.path_indices.append(head_idx)
 
-    def add_point(self, env, point, scale, conf_factor=0.5):
+    def add_point(self, env, point, Q_scaled, conf_factor=0.5):
         """Add a point to the plan and perform the necessary propagation.
         """
         if self.k == 0:
@@ -296,7 +294,7 @@ class Plan:
         line_indices = PlanUtils.rectlines2lines(lines_seen_now)
         self.C, w = PlanUtils.get_observation_matrices(lines_seen_now, env, self.n)
         know = self.k % (self.kmax + 1)
-        self.Q_scaled[know] = self.Q * scale
+        self.Q_scaled[know] = Q_scaled
         Pbar = (self.A.dot(self.P)).dot(self.A.T) + self.Q_scaled[know]
         Rhat = PlanUtils.get_Rhat(self.R, w, conf_factor)
         self.L = (Pbar.dot(self.C.T)).dot(

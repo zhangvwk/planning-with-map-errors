@@ -13,7 +13,7 @@ from shapes import Point
 
 
 # def process_plan(
-#     samples, edges, scales, env, prob_threshold, scaling_factors, p, P
+#     samples, edges, Qs_scaled, env, prob_threshold, scaling_factors, p, P
 # ):
 #     print(
 #         "========== p = {} at index {} ==========".format(
@@ -37,7 +37,7 @@ from shapes import Point
 #         p_copy = deepcopy(p)
 #         for i, sub_neighbor in enumerate(to_neighbor_path[1:]):
 #             p_copy.add_point(
-#                 env, sub_neighbor, scales[p.head_idx][neighbor_idx][i],
+#                 env, sub_neighbor, Qs_scaled[p.head_idx][neighbor_idx][i],
 #             )
 #             prob_collision = p_copy.get_max_prob_collision(env, scaling_factors)
 #             if prob_collision >= prob_threshold:
@@ -68,7 +68,7 @@ from shapes import Point
 #     return plans_to_add
 
 
-def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p):
+def process_plan(samples, edges, Qs_scaled, env, prob_threshold, scaling_factors, p):
     print(
         "========== p = {} at index {} ==========".format(
             samples[p.head_idx], p.head_idx
@@ -90,7 +90,7 @@ def process_plan(samples, edges, scales, env, prob_threshold, scaling_factors, p
         p_copy = deepcopy(p)
         for i, sub_neighbor in enumerate(to_neighbor_path[1:]):
             p_copy.add_point(
-                env, sub_neighbor, scales[p.head_idx][neighbor_idx][i],
+                env, sub_neighbor, Qs_scaled[p.head_idx][neighbor_idx][i],
             )
             prob_collision = p_copy.get_max_prob_collision(env, scaling_factors)
             if prob_collision >= prob_threshold:
@@ -136,14 +136,14 @@ class Searcher:
         self.start_idx = start_idx
         self.x_init = self.graph.samples[start_idx, :]
 
-    def initialize_open(self, Q, R, P0, kmax):
+    def initialize_open(self, R, P0, kmax):
         self.clear()
         self.plan_number = 0
         p_init = Plan(
             self.x_init, self.start_idx, self.graph.env, self.x_init.shape[0], R, kmax,
         )
         # Set variables in p_init
-        p_init.set_motion(self.graph.planner.A, self.graph.planner.B, Q)
+        p_init.set_motion(self.graph.planner.A, self.graph.planner.B)
         p_init.set_gain(self.graph.planner.gain)
         p_init.set_init_est(P0)
         self.P_open.add((p_init, self.plan_number))
@@ -308,7 +308,7 @@ class Searcher:
             #     delayed(process_plan)(
             #         self.graph.samples,
             #         self.graph.edges,
-            #         self.graph.scales,
+            #         self.graph.Qs_scaled,
             #         self.graph.env,
             #         self.prob_threshold,
             #         scaling_factors,
@@ -325,7 +325,7 @@ class Searcher:
                 delayed(process_plan)(
                     self.graph.samples,
                     self.graph.edges,
-                    self.graph.scales,
+                    self.graph.Qs_scaled,
                     self.graph.env,
                     self.prob_threshold,
                     scaling_factors,
