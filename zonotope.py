@@ -116,37 +116,15 @@ class Zonotope:
         return pc.Polytope(A, b)
 
     def to_polygon(self):
+        return Polygon(self.to_V())
+
+    def to_V(self):
         A, b = self.to_H()
         try:
             vertices = compute_polytope_vertices(A, b)
         except:
-            # print("A = {}".format(A))
-            # print("b = {}".format(b))
-            A.dump("A_polytope_error.dat")
-            b.dump("b_polytope_error.dat")
-            raise PolytopeError
-        # sort those vertices
-        center = tuple(
-            map(
-                operator.truediv,
-                reduce(lambda x, y: map(operator.add, x, y), vertices),
-                [len(vertices)] * 2,
-            )
-        )
-        vertices.sort(
-            key=lambda coord: (
-                -135
-                - math.degrees(
-                    math.atan2(*tuple(map(operator.sub, coord, center))[::-1])
-                )
-            )
-            % 360
-        )
-        return Polygon(vertices)
-
-    def to_V(self):
-        A, b = self.to_H()
-        vertices = compute_polytope_vertices(A, b)
+            self.reduce(10)
+            vertices = compute_polytope_vertices(A, b)
         # sort those vertices
         center = tuple(
             map(
