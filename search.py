@@ -80,6 +80,7 @@ def process_plan(samples, edges, Qs_scaled, env, prob_threshold, scaling_factors
     start = time.time()
 
     plans_to_add = []
+    num_discarded = 0
 
     for neighbor_idx, v in edges[p.head_idx].items():
         if neighbor_idx in set(p.path_indices):
@@ -95,6 +96,7 @@ def process_plan(samples, edges, Qs_scaled, env, prob_threshold, scaling_factors
             prob_collision = p_copy.get_max_prob_collision(env, scaling_factors)
             if prob_collision >= prob_threshold:
                 discard = True
+                num_discarded += 1
                 break
         if discard:
             continue
@@ -108,7 +110,7 @@ def process_plan(samples, edges, Qs_scaled, env, prob_threshold, scaling_factors
         )
     )
 
-    return plans_to_add
+    return plans_to_add, num_discarded
 
 
 def process_dominated(P_head_idx, p_head_idx, p_cost, p_Xk_full, plan_number):
@@ -203,10 +205,12 @@ class Searcher:
             )
         return False
 
-    def remove_dominated(self, prune=True):
+    def remove_dominated(self, prune_portion=None):
         num_open_plans = len(self.P_open)
         to_remove_from_P_open = set()
+        cnt = 1
         for p, plan_number in self.P_open:
+            print("Remove dominated {}/{}...".format(cnt, num_open_plans), end="\r")
             if p.head_idx in self.P:
                 to_remove_from_P = set()
                 for q in self.P[p.head_idx]:
@@ -216,14 +220,15 @@ class Searcher:
                         to_remove_from_P_open.add((p, plan_number))
                         to_remove_from_P.add(p)
                 self.P[p.head_idx] -= to_remove_from_P
+            cnt += 1
         self.P_open -= to_remove_from_P_open
         print(
             "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
         )
-        if prune:
-            self.prune_alternate()
+        if prune_portion is not None:
+            self.prune_alternate(prune_portion)
 
-    def remove_dominated_parallel(self, n_jobs, prune=True):
+    def remove_dominated_parallel(self, n_jobs, prune_portion=0.1):
         num_open_plans = len(self.P_open)
         to_remove_from_P_open = set()
         results = Parallel(n_jobs=n_jobs)(
@@ -240,10 +245,10 @@ class Searcher:
         print(
             "P_open went from {} to {} plans.".format(num_open_plans, len(self.P_open))
         )
-        if prune:
-            self.prune_alternate()
+        if prune_portion is not None:
+            self.prune_alternate(prune_portion)
 
-    def prune_alternate(self, portion=0.1):
+    def prune_alternate(self, prune_portion):
         num_open_plans = len(self.P_open)
         if num_open_plans >= 10:
             print("num_open_plans = {}".format(num_open_plans))
@@ -251,7 +256,7 @@ class Searcher:
                 self.P_open,
                 key=lambda p_tuple: p_tuple[0].cost * self.ratios[p_tuple[0].head_idx],
             )
-            num_open_plans_to_remove = int(portion * num_open_plans) + 1
+            num_open_plans_to_remove = int(prune_portion * num_open_plans) + 1
             self.P_open = set(P_open_sorted[:-num_open_plans_to_remove])
             print("Pruned {} plans in P_open.".format(num_open_plans_to_remove))
 
@@ -281,6 +286,7 @@ class Searcher:
         scaling_factors=[6, 5, 4, 3, 2, 1],
         early_termination=True,
         remove_dominated_parallel=True,
+        prune_portion=0.25,
     ):
         if self.x_init is None:
             print("Please set the source node using .set_source(x_init)")
@@ -333,7 +339,9 @@ class Searcher:
                 )
                 for p, _ in self.G
             )
-            for result in results:
+            num_discarded_tot = 0
+            for result, num_discarded in results:
+                num_discarded_tot += num_discarded
                 for plan, neighbor_idx in result:
                     self.plan_number += 1
                     self.P[neighbor_idx].add(plan)
@@ -341,13 +349,19 @@ class Searcher:
                     self.P_open_dict[self.plan_number] = plan
 
             print(80 * "=")
-            print("Done iteration %d" % i)
+            print(
+                "Done iteration {}, discarded {} unsafe plans.".format(
+                    i, num_discarded_tot
+                )
+            )
             print(80 * "=")
             t1 = time.time()
             if remove_dominated_parallel:
-                self.remove_dominated_parallel(n_jobs=n_jobs)
+                self.remove_dominated_parallel(
+                    n_jobs=n_jobs, prune_portion=prune_portion
+                )
             else:
-                self.remove_dominated()
+                self.remove_dominated(prune_portion=prune_portion)
             print("remove_dominated took {} s.".format(time.time() - t1))
             self.P_open -= self.G
             i += 1
