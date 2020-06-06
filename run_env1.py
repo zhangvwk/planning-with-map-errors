@@ -43,7 +43,7 @@ tol = 1e-2
 g = Graph(x0, x_range, env, lqr_planner)
 g.clear()
 g.set_samples(np.load("samples_env1.dat", allow_pickle=True))
-g.build(r=10, max_neighbors=5, tol=tol, motion_noise_ratio=0.05)
+g.build(r=2, max_neighbors=3, tol=tol, motion_noise_ratio=0.05)
 
 """ Initial estimates """
 # We are confident about our initial estimate up to 0.5% of the environment size.
@@ -63,7 +63,12 @@ searcher.initialize_open(R, P_est_0, kmax)
 searcher.set_goal(goal_region)
 
 """ Explore """
-collision_thresh = 0.01  # Safe = less than 1% chance of collision.
+prob_threshold = 0.01  # Safe = less than 1% chance of collision.
+prune_portion = 0.1
 t1 = time.time()
-P_candidates, plan_found = searcher.explore(collision_thresh)
+P_candidates, plan_found = searcher.explore(
+    prob_threshold=prob_threshold,
+    prune_portion=prune_portion,
+    remove_dominated_parallel=False,
+)
 print("Terminated in {} s.".format(time.time() - t1))
