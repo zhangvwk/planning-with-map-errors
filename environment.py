@@ -157,13 +157,16 @@ class Environment2D:
                 return True
         return False
 
-    def get_lines_seen(self, p, config):
+    def get_lines_seen(self, p, config, cap=None):
         """Return the lines of self.rectangles that are
         entirely seen by a point p, in the format:
         {
             rectangle_id_1: [line_idx_1, line idx_2, ...],
             rectangle_id_2: [line_idx_3, ...]
         }
+        Optionally set cap to an integer specifying the maximum number of lines to
+        select from all the lines seen.
+        Selection is based on distance between p and the middle point of a line.
         """
         lines_seen_dict = {}
         for rectangle_id in self.rectangles:
@@ -174,6 +177,25 @@ class Environment2D:
             lines_seen = self.curate_lines(lines_possibly_seen, rectangle_id, p, config)
             if lines_seen:
                 lines_seen_dict[rectangle_id] = lines_seen
+
+        if cap is not None:
+            lines_seen_dist = []
+            for rec_idx in lines_seen_dict:
+                for edge_idx in lines_seen_dict[rec_idx]:
+                    pA = self.rectangles[rec_idx].edges[config][edge_idx][0]
+                    pB = self.rectangles[rec_idx].edges[config][edge_idx][1]
+                    mid = (pB - pA) / 2
+                    dist = (p - pA + mid).norm()
+                    lines_seen_dist.append((dist, rec_idx, edge_idx))
+            lines_seen_dict_capped = {}
+            for dist, rec_idx, line_idx in sorted(lines_seen_dist)[
+                : min(cap, len(lines_seen_dist))
+            ]:
+                if rec_idx not in lines_seen_dict_capped:
+                    lines_seen_dict_capped[rec_idx] = [line_idx]
+                else:
+                    lines_seen_dict_capped[rec_idx].append(line_idx)
+            return lines_seen_dict_capped
         return lines_seen_dict
 
     def curate_lines(self, lines_possibly_seen, rectangle_id, p, config):

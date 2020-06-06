@@ -11,11 +11,11 @@ from zonotope import Zonotope
 
 class PlanUtils:
     @staticmethod
-    def get_lines_seen_now(env, point, config="full"):
+    def get_lines_seen_now(env, point, config="full", cap=5):
         if not isinstance(point, np.ndarray):
-            return env.get_lines_seen(point, config=config)
+            return env.get_lines_seen(point, config=config, cap=cap)
         else:
-            return env.get_lines_seen(Point(point[0], point[1]), config=config)
+            return env.get_lines_seen(Point(point[0], point[1]), config=config, cap=cap)
 
     @staticmethod
     def rectlines2lines(rectlines):
