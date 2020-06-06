@@ -123,8 +123,10 @@ class Zonotope:
         try:
             vertices = compute_polytope_vertices(A, b)
         except:
-            self.reduce(10)
-            vertices = compute_polytope_vertices(A, b)
+            # self.reduce(10)
+            # vertices = compute_polytope_vertices(A, b)
+            print("[INFO] Using Polytope approximation...")
+            return pc.extreme(pc.Polytope(A, b))
         # sort those vertices
         center = tuple(
             map(
