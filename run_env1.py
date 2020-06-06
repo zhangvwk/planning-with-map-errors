@@ -9,6 +9,7 @@ from graph import Graph
 from lqr import LQRPlanner
 from search import Searcher
 from plan import PlanUtils
+from utils import ProcTools
 
 
 """ Environment """
@@ -42,7 +43,7 @@ x_range = np.array([x_lims, y_lims])
 tol = 1e-2
 g = Graph(x0, x_range, env, lqr_planner)
 g.clear()
-g.set_samples(np.load("samples_env1.dat", allow_pickle=True))
+g.set_samples(np.load("samples/samples_env1.dat", allow_pickle=True))
 g.build(r=2, max_neighbors=3, tol=tol, motion_noise_ratio=0.05)
 
 """ Initial estimates """
@@ -72,3 +73,5 @@ P_candidates, plan_found = searcher.explore(
     remove_dominated_parallel=False,
 )
 print("Terminated in {} s.".format(time.time() - t1))
+
+ProcTools.dump_plans(P_candidates, "candidates_env1.txt")

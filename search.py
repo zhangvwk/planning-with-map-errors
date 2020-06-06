@@ -210,7 +210,7 @@ class Searcher:
         to_remove_from_P_open = set()
         cnt = 1
         for p, plan_number in self.P_open:
-            print("Remove dominated {}/{}...".format(cnt, num_open_plans), end="\r")
+            print("[INFO] Remove dominated {}/{}...".format(cnt, num_open_plans), end="\r")
             if p.head_idx in self.P:
                 to_remove_from_P = set()
                 for q in self.P[p.head_idx]:

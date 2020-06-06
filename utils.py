@@ -1,6 +1,7 @@
 # Standard libraries
 import matplotlib.pyplot as plt
 import numpy as np
+import json
 
 
 class GeoTools:
@@ -154,3 +155,22 @@ class PlotTools:
     def plot_traj(x, linestyle="-", color="r"):
         x_list, y_list = map(list, zip(*[(state[0], state[1]) for state in x]))
         plt.plot(x_list, y_list, linestyle=linestyle, color=color)
+
+
+class ProcTools:
+    @staticmethod
+    def dump_plans(plans_list, output_filename):
+        with open(output_filename, "w") as outfile:
+            print("[INFO] Dumping {} candidate(s)...".format(len(plans_list)))
+            i = 1
+            for p_candidate in plans_list:
+                print(
+                    "Candidate {}: {}, {}.".format(
+                        i, p_candidate.path_indices, p_candidate.cost
+                    )
+                )
+                json.dump(list(map(int, p_candidate.path_indices)), outfile)
+                outfile.write(", ")
+                json.dump(p_candidate.cost, outfile)
+                outfile.write("\n")
+                i += 1
