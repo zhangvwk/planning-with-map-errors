@@ -322,9 +322,10 @@ class Plan:
             for n1 in range(max(0, self.k - self.kmax), self.k + 1):
                 n = n1 % (self.kmax + 1)
                 if (
-                    np.intersect1d(additional, self.Sn[n]).size == 0
-                    or np.intersect1d(missing, self.Sn[n]).size == 0
+                    np.intersect1d(additional, self.Sn[n]).size>0
+                    or np.intersect1d(missing, self.Sn[n]).size>0
                 ):
+                    # if either one of the previous sets is not empty, we need to update
                     self.Nu[n].set_values(self.Sn[n], lines)
 
         self.Sn[know] = lines
