@@ -9,6 +9,10 @@ from functools import reduce
 SCALING_FOR_INCLUSION = np.sqrt(2) * erfinv(0.9 ** 0.5)
 
 
+class PolytopeError(Exception):
+    pass
+
+
 def area(x, y):
     return 0.5 * np.abs(np.dot(x, np.roll(y, 1)) - np.dot(y, np.roll(x, 1)))
 
@@ -19,7 +23,7 @@ class Zonotope:
         self.G = np.copy(generators)
         self.Sig = np.copy(cov)
         self._H_is_valid = False
-        if len(self.G.shape)==1:
+        if len(self.G.shape) == 1:
             self.e = 1
         else:
             self.e = self.G.shape[1]
@@ -37,8 +41,8 @@ class Zonotope:
         etot = self.e + other.e
         n = self.G.shape[0]
         G = np.zeros((n, etot))
-        G[:,:self.e] = self.G.reshape(n, -1)
-        G[:,self.e:] = other.G.reshape(n, -1)
+        G[:, : self.e] = self.G.reshape(n, -1)
+        G[:, self.e :] = other.G.reshape(n, -1)
 
         Sig = self.Sig + other.Sig
 
@@ -51,7 +55,7 @@ class Zonotope:
         n_points = len(v)
         XY = np.zeros((n_points, self.c.shape[0]))
         for i in range(n_points):
-            XY[i,:] = v[i]
+            XY[i, :] = v[i]
 
         ineq = A.dot(XY.T)
         for i in range(n_points):
@@ -66,7 +70,7 @@ class Zonotope:
         self.c = T.dot(self.c)
         self.G = T.dot(self.G)
         self.Sig = T.dot(self.Sig.dot(T.transpose()))
-        self._H_is_valid = False # invalidate the stored H representation
+        self._H_is_valid = False  # invalidate the stored H representation
         # print("c = {}".format(self.c))
         # print("T = {}".format(T))
         # print("Sig = {}".format(self.Sig))
@@ -77,7 +81,7 @@ class Zonotope:
         This operation is expensive but tractable when n=2.
         For more details, see Matthias' thesis, p. 15.
         """
-        if (self._H_is_valid):
+        if self._H_is_valid:
             return self.A, self.b
 
         if len(self.G.shape) == 1:
@@ -90,12 +94,12 @@ class Zonotope:
         dm = np.ones((e,))
 
         gg = np.zeros(self.G.shape)
-        gg[0,:] = self.G[1,:]
-        gg[1,:] = -self.G[0,:]
+        gg[0, :] = self.G[1, :]
+        gg[1, :] = -self.G[0, :]
         ggnorm = np.linalg.norm(gg, axis=0)
 
         i_nonzero = np.ma.masked_where(ggnorm > 1e-10, ggnorm).mask
-        Cp[i_nonzero,:] = np.transpose(gg[:,i_nonzero] / ggnorm[i_nonzero])
+        Cp[i_nonzero, :] = np.transpose(gg[:, i_nonzero] / ggnorm[i_nonzero])
 
         deltas = np.sum(np.fabs(Cp.dot(self.G)), axis=1)
         dp[i_nonzero] = Cp.dot(self.c)[i_nonzero] + deltas[i_nonzero]
@@ -113,18 +117,51 @@ class Zonotope:
 
     def to_polygon(self):
         A, b = self.to_H()
-        vertices = compute_polytope_vertices(A, b)
+        try:
+            vertices = compute_polytope_vertices(A, b)
+        except:
+            print("A = {}".format(A))
+            print("b = {}".format(b))
+            raise PolytopeError
         # sort those vertices
-        center = tuple(map(operator.truediv, reduce(lambda x, y: map(operator.add, x, y), vertices), [len(vertices)] * 2))
-        vertices.sort(key=lambda coord: (-135 - math.degrees(math.atan2(*tuple(map(operator.sub, coord, center))[::-1]))) % 360)
+        center = tuple(
+            map(
+                operator.truediv,
+                reduce(lambda x, y: map(operator.add, x, y), vertices),
+                [len(vertices)] * 2,
+            )
+        )
+        vertices.sort(
+            key=lambda coord: (
+                -135
+                - math.degrees(
+                    math.atan2(*tuple(map(operator.sub, coord, center))[::-1])
+                )
+            )
+            % 360
+        )
         return Polygon(vertices)
 
     def to_V(self):
         A, b = self.to_H()
         vertices = compute_polytope_vertices(A, b)
         # sort those vertices
-        center = tuple(map(operator.truediv, reduce(lambda x, y: map(operator.add, x, y), vertices), [len(vertices)] * 2))
-        vertices.sort(key=lambda coord: (-135 - math.degrees(math.atan2(*tuple(map(operator.sub, coord, center))[::-1]))) % 360)
+        center = tuple(
+            map(
+                operator.truediv,
+                reduce(lambda x, y: map(operator.add, x, y), vertices),
+                [len(vertices)] * 2,
+            )
+        )
+        vertices.sort(
+            key=lambda coord: (
+                -135
+                - math.degrees(
+                    math.atan2(*tuple(map(operator.sub, coord, center))[::-1])
+                )
+            )
+            % 360
+        )
         return vertices
 
     def reduce(self, target_order=1.0):
@@ -135,7 +172,7 @@ class Zonotope:
         if self.G.shape[1] < 4:
             return
 
-        self._H_is_valid = False # invalidate the stored H-rep
+        self._H_is_valid = False  # invalidate the stored H-rep
 
         # keep reducing as long as the order is greater than the target order
         while self.get_order() > target_order:
@@ -202,7 +239,7 @@ class Zonotope:
         V = np.zeros((k,))
         for i in range(k):
             X2 = confid_sets[i].to_polygon()
-            V[i] = X2.intersection(X).area # this is faster than intersect of polytope
+            V[i] = X2.intersection(X).area  # this is faster than intersect of polytope
 
         # compute intersection prob
         prob = 1 - erf(scaling_factors[0] / np.sqrt(2.0)) ** (2.0 * n)

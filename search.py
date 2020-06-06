@@ -10,6 +10,7 @@ from joblib import Parallel, delayed
 from plan import Plan
 from utils import GeoTools
 from shapes import Point
+from zonotope import PolytopeError
 
 
 # def process_plan(
@@ -93,7 +94,11 @@ def process_plan(samples, edges, Qs_scaled, env, prob_threshold, scaling_factors
             p_copy.add_point(
                 env, sub_neighbor, Qs_scaled[p.head_idx][neighbor_idx][i],
             )
-            prob_collision = p_copy.get_max_prob_collision(env, scaling_factors)
+            try:
+                prob_collision = p_copy.get_max_prob_collision(env, scaling_factors)
+            except PolytopeError:
+                print("p_copy.head_idx = {}".format(p_copy.head_idx))
+                print("p_copy.path_indices = {}".format(p_copy.path_indices))
             if prob_collision >= prob_threshold:
                 discard = True
                 num_discarded += 1
@@ -210,7 +215,9 @@ class Searcher:
         to_remove_from_P_open = set()
         cnt = 1
         for p, plan_number in self.P_open:
-            print("[INFO] Remove dominated {}/{}...".format(cnt, num_open_plans), end="\r")
+            print(
+                "[INFO] Remove dominated {}/{}...".format(cnt, num_open_plans), end="\r"
+            )
             if p.head_idx in self.P:
                 to_remove_from_P = set()
                 for q in self.P[p.head_idx]:
