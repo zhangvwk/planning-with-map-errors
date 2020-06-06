@@ -187,7 +187,9 @@ class NuValues:
 
 
 class Plan:
-    def __init__(self, start_point, start_idx, env, n, R=0.1, kmax=100):
+    def __init__(
+        self, start_point, start_idx, env, n, R=0.1, kmax=100, store_all_full=False
+    ):
         self.head = start_point
         self.start_point = start_point
         self.path_indices = [start_idx]
@@ -201,6 +203,8 @@ class Plan:
         self.kmax = kmax
         self.k = 0
         self._nlines_tot = env.nlines_tot
+
+        self.store_all_full = store_all_full  # Whether to store all Xks_full
 
         self.initialize_variables()
         self.initialize_Nu(start_point, env)
@@ -267,10 +271,9 @@ class Plan:
         self.P = P0
         self.est_ready = True
         # Xk full
-        amb = self.a - self.b
-        center_offset = self.head + amb.dot(self.start_point)
-        cov_offset = amb.dot(self.P0.dot(amb.T))
-        self.Xk_full = Zonotope(center_offset, np.zeros(2), cov_offset)
+        self.Xk_full = Zonotope(self.start_point, np.zeros(2), self.P0)
+        if self.store_all_full:
+            self.Xks_full = [self.Xk_full]
 
     def is_initialized(self):
         return self.motion_ready and self.gain_ready and self.est_ready
@@ -322,8 +325,8 @@ class Plan:
             for n1 in range(max(0, self.k - self.kmax), self.k + 1):
                 n = n1 % (self.kmax + 1)
                 if (
-                    np.intersect1d(additional, self.Sn[n]).size>0
-                    or np.intersect1d(missing, self.Sn[n]).size>0
+                    np.intersect1d(additional, self.Sn[n]).size > 0
+                    or np.intersect1d(missing, self.Sn[n]).size > 0
                 ):
                     # if either one of the previous sets is not empty, we need to update
                     self.Nu[n].set_values(self.Sn[n], lines)
@@ -400,7 +403,7 @@ class Plan:
         {configId -> corresponding reachable set Xk}
         """
         amb = self.a - self.b
-        center_offset = self.head + amb.dot(self.start_point)
+        center_offset = self.head
         cov_offset = amb.dot(self.P0.dot(amb.T))
         for n1 in range(max(1, self.k + 1 - self.kmax), self.k + 1):
             n = n1 % (self.kmax + 1)
@@ -421,6 +424,9 @@ class Plan:
             self.Xk_full += tmp
         self.Xk_full.c += center_offset
         self.Xk_full.Sig += cov_offset
+
+        if self.store_all_full:
+            self.Xks_full.append(self.Xk_full)
 
         for configID in range(2 ** n_extr):
             # trick because I don't have a zero zonotope
