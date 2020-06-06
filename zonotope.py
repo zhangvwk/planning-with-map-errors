@@ -120,8 +120,10 @@ class Zonotope:
         try:
             vertices = compute_polytope_vertices(A, b)
         except:
-            print("A = {}".format(A))
-            print("b = {}".format(b))
+            # print("A = {}".format(A))
+            # print("b = {}".format(b))
+            A.dump("A_polytope_error.dat")
+            b.dump("b_polytope_error.dat")
             raise PolytopeError
         # sort those vertices
         center = tuple(

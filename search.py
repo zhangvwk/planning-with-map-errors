@@ -99,6 +99,7 @@ def process_plan(samples, edges, Qs_scaled, env, prob_threshold, scaling_factors
             except PolytopeError:
                 print("p_copy.head_idx = {}".format(p_copy.head_idx))
                 print("p_copy.path_indices = {}".format(p_copy.path_indices))
+                raise
             if prob_collision >= prob_threshold:
                 discard = True
                 num_discarded += 1
