@@ -10,7 +10,7 @@ from lqr import LQRPlanner
 from search import Searcher
 from plan import PlanUtils
 from utils import ProcTools
-
+import matplotlib.pyplot as plt
 
 """ Environment """
 x_lims = [-10, 10]
@@ -21,9 +21,9 @@ rec_0 = Rectangle(0, -8, 7, 7, 2, 0)
 rec_1 = Rectangle(1, 3, 7, 4, 2, 0)
 rec_2 = Rectangle(2, -4, 2, 9, 1.5, 0)
 rec_3 = Rectangle(3, -3, -2.5, 2, 2, 0)
-rec_4 = Rectangle(4, -8, -10, 3, 3, 0)
-rec_5 = Rectangle(5, 2, -9, 2.5, 2.5, 0)
-rec_6 = Rectangle(6, 3.5, -1.5, 2, 2, 0)
+rec_4 = Rectangle(4, -8, -11, 3, 3, 0)
+rec_5 = Rectangle(5, 2, -10.5, 2.5, 2.5, 0)
+rec_6 = Rectangle(6, 3.5, -3, 2, 2, 45)
 
 rec_0.set_error_bounds(np.array([-0.5, 0, 0, 0]), np.array([1.5, 0, 0.5, 0]))
 rec_1.set_error_bounds(np.array([0, 0, 0, 0]), np.array([1, 1.5, 0, 0.5]))
@@ -31,7 +31,7 @@ rec_2.set_error_bounds(np.array([0, 0, 0, 0]), np.array([0.5, 0, 0.5, 0.5]))
 rec_3.set_error_bounds(np.array([0, 0, 0, 0]), np.array([0, 0, 1, 0]))
 rec_4.set_error_bounds(np.array([0, -0.5, 0, 0]), np.array([0, 2, 1.5, 0]))
 rec_5.set_error_bounds(np.array([0, 0, 0, 0]), np.array([0, 0, 0.5, 1.5]))
-rec_6.set_error_bounds(np.array([0, 0, 0, 0]), np.array([0.5, 0, 1.0, 0.5]))
+rec_6.set_error_bounds(np.array([0, 0, 0, 0]), np.array([0, 0, 1.0, 0.5]))
 
 env.add_rectangles([rec_0, rec_1, rec_2, rec_3, rec_4, rec_5, rec_6])
 goal_region = Rectangle(-1, 6.5, 2, 2, 2, 0)
@@ -50,8 +50,10 @@ x_range = np.array([x_lims, y_lims])
 tol = 1e-2
 g = Graph(x0, x_range, env, lqr_planner)
 g.clear()
-g.set_samples(np.load("samples/samples_env2.dat", allow_pickle=True))
+g.set_samples(np.load("samples/samples_env2_tilted.dat", allow_pickle=True))
 g.build(r=2, max_neighbors=3, tol=tol, motion_noise_ratio=0.05)
+
+print(g.edges[101])
 
 """ Initial estimates """
 # We are confident about our initial estimate up to 0.5% of the environment size.
