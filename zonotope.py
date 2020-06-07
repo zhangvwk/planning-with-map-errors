@@ -1,6 +1,6 @@
 import numpy as np
 import polytope as pc
-import math, operator
+import math, operator, pdb
 from scipy.special import erf, erfinv
 from shapely.geometry import Polygon
 from pypoman import compute_polytope_vertices
@@ -116,18 +116,40 @@ class Zonotope:
         return pc.Polytope(A, b)
 
     def to_polygon(self):
+        vertices = self.to_V()
+        try:
+            p = Polygon(vertices)
+        except:
+            pdb.set_trace()
         return Polygon(self.to_V())
 
     def to_V(self):
         A, b = self.to_H()
+        # first try
         try:
             vertices = compute_polytope_vertices(A, b)
+        # failed, reduce and call polytope instead
         except:
-            # self.reduce(10)
-            # vertices = compute_polytope_vertices(A, b)
-            print("[INFO] Using Polytope approximation...")
-            return pc.extreme(pc.Polytope(A, b))
-        # sort those vertices
+            #print('Reducing...')
+            self.reduce(4)
+            A, b = self.to_H()
+            try:
+                return pc.extreme(pc.Polytope(A, b))
+            except:
+                pdb.set_trace()
+
+        # did it really succeed?
+        if len(vertices)<4:
+            # probably a failure, reduce and call polytope instead
+            #print('pypoman probably failed, reducing...')
+            self.reduce(4)
+            A, b = self.to_H()
+            try:
+                return pc.extreme(pc.Polytope(A, b))
+            except:
+                pdb.set_trace()
+
+        # we are pretty confident it worked, sort those vertices
         center = tuple(
             map(
                 operator.truediv,
@@ -165,12 +187,13 @@ class Zonotope:
             norm_diff = np.linalg.norm(self.G, ord=1, axis=0) - np.linalg.norm(
                 self.G, ord=np.inf, axis=0
             )
-            select = np.argpartition(norm_diff, 4)[:4]
+            select = np.argpartition(norm_diff, 3)[:4]
 
             chosen_g = self.G[:, select]
             coeff = np.sum(np.fabs(chosen_g), axis=1)
             self.G = np.delete(self.G, select, axis=1)
             self.G = np.hstack((self.G, np.array([[coeff[0], 0], [0, coeff[1]]])))
+            self.e = self.G.shape[1]
 
     def get_confidence_sets(self, scaling_factors):
         """
