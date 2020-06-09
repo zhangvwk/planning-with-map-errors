@@ -372,25 +372,22 @@ class Plan:
         know = self.k % (self.kmax + 1)
         n_extr = len(self.Sn[know])
         Xks = self.get_Xks()
-        p = 0.0
+        ps = []
         for configID in range(2 ** n_extr):
             bconfig = PlanUtils.configID2bitarray(
                 configID, self.Sn[know], self._nlines_tot
             )
+            p = 0.0
             for rectangle_idx in self.rectangles_seen_now:
                 # Get the corresponding rectangle configuration
                 config = bconfig[rectangle_idx * 4 : (rectangle_idx + 1) * 4]
-                p = max(
-                    p,
-                    self.get_prob_collision(
-                        Xks[configID],
-                        env.rectangles[rectangle_idx].to_zonotope(
-                            frozenbitarray(config)
-                        ),
-                        scaling_factors,
-                    ),
+                p += self.get_prob_collision(
+                    Xks[configID],
+                    env.rectangles[rectangle_idx].to_zonotope(frozenbitarray(config)),
+                    scaling_factors,
                 )
-        return p
+            ps.append(p)
+        return max(ps)
 
     def get_prob_collision(self, Xk, rectangle_zono, scaling_factors):
         """Return the probability of collision between the reachable set
