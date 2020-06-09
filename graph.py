@@ -290,11 +290,26 @@ class Graph:
             path.append(self.samples[idx, :2])
         return path
 
-    def plot(self, ax=None, plot_edges=True, show_idx=False):
+    def plot(
+        self,
+        ax=None,
+        plot_edges=True,
+        show_idx=False,
+        show_id=True,
+        show_edges_id=True,
+        show_full=True,
+        show_actual_errors=False,
+    ):
         """Plot the the nodes and edges of the graph.
         Note: this can take a long time if plot_edges is set to True.
         """
-        self.env.plot(ax=ax)
+        self.env.plot(
+            ax=ax,
+            show_id=show_id,
+            show_edges_id=show_edges_id,
+            show_full=show_full,
+            show_actual_errors=show_actual_errors,
+        )
         x_init_x, x_init_y = self.x_init[:2]
         plt.scatter(x_init_x, x_init_y, color="r", label="x_init")
         if show_idx:
@@ -308,18 +323,25 @@ class Graph:
                     str(i + 1), [sample_x, sample_y], fontsize=10,
                 )
         else:
-            plt.scatter(self.samples[1:, 0], self.samples[1:, 1], color="g")
+            plt.scatter(
+                self.samples[1:, 0], self.samples[1:, 1], color="g", s=30
+            )
         if plot_edges:
             self.plot_edges()
 
     def plot_edges(self):
         """Plot the edges of the graph."""
+        been_there = set()
         for src_idx in self.edges:
             for dest_idx in self.edges[src_idx]:
-                plt.plot(
-                    self.edges[src_idx][dest_idx][1][:, 0],
-                    self.edges[src_idx][dest_idx][1][:, 1],
-                    linestyle="--",
-                    color="k",
-                    alpha=0.25,
-                )
+                if (src_idx, dest_idx) and (dest_idx, src_idx) not in been_there:
+                    plt.plot(
+                        self.edges[src_idx][dest_idx][1][:, 0],
+                        self.edges[src_idx][dest_idx][1][:, 1],
+                        linestyle="--",
+                        linewidth=0.5,
+                        color="k",
+                        alpha=1.0,
+                    )
+                    been_there.add((src_idx, dest_idx))
+                    been_there.add((dest_idx, src_idx))

@@ -132,7 +132,7 @@ class Simulator:
         prob_collision = float(num_collisions / iters)
         return xs, x_ests, x_bars, prob_collision
 
-    def plot_trajs(self, xs, x_noms):
+    def plot_trajs(self, xs, x_noms, ax, linestyle="--"):
         for i in xs:
-            PlotTools.plot_traj(xs[i])
-        PlotTools.plot_traj(x_noms, linestyle="--", color="k")
+            PlotTools.plot_traj(xs[i], ax=ax)
+        PlotTools.plot_traj(x_noms, ax=ax, linestyle=linestyle, color="k")

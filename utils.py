@@ -152,9 +152,21 @@ class PlotTools:
             polygon.plot_min_proj(p)
 
     @staticmethod
-    def plot_traj(x, linestyle="-", color="r"):
+    def plot_traj(x, ax, linestyle="-", color="r", marker=False):
         x_list, y_list = map(list, zip(*[(state[0], state[1]) for state in x]))
-        plt.plot(x_list, y_list, linestyle=linestyle, color=color)
+        if marker:
+            ax.plot(
+                x_list,
+                y_list,
+                linestyle=linestyle,
+                color=color,
+                marker="o",
+                markersize=7,
+            )
+        else:
+            ax.plot(
+                x_list, y_list, linestyle=linestyle, color=color,
+            )
 
 
 class ProcTools:

@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 from scipy.constants import degree
-import polytope as pc
 from bitarray import frozenbitarray
 
 # Custom libraries
@@ -49,6 +48,9 @@ class Point:
 
     def dot(self, p2):
         return self.as_array().dot(p2.as_array())
+
+    def cross(self, p2):
+        return np.cross(self.as_array(), p2.as_array())
 
     def is_in_triangle(self, p1, p2, p3):
         o1 = GeoTools.orientation(self, p2, p1)
@@ -130,12 +132,13 @@ class Polygon:
     def plot(self, show_id=True, show_edges_id=True, as_goal=False, mask=False):
         if not as_goal:
             if mask:
-                plt.plot(
-                    self.x_list + [self.x_list[0]],
-                    self.y_list + [self.y_list[0]],
-                    color="r",
-                    alpha=0.75,
-                )
+                # plt.plot(
+                #     self.x_list + [self.x_list[0]],
+                #     self.y_list + [self.y_list[0]],
+                #     color="r",
+                #     alpha=0.75,
+                # )
+                pass
             else:
                 plt.fill(
                     self.x_list,
@@ -161,6 +164,14 @@ class Polygon:
                     )
             annot = str(self.id)
             color = "k"
+            if show_id:
+                plt.annotate(
+                    annot,
+                    self.get_center_gen()[0],
+                    fontsize=12,
+                    weight="bold",
+                    color=color,
+                )
         else:
             plt.fill(
                 self.x_list,
@@ -172,9 +183,9 @@ class Polygon:
             )
             annot = "G"
             color = "r"
-        plt.annotate(
-            annot, self.get_center_gen()[0], fontsize=12, weight="bold", color=color
-        )
+            plt.annotate(
+                annot, self.get_center_gen()[0], fontsize=12, weight="bold", color=color
+            )
 
     def get_min_dist(self, p, config="original"):
         min_dist = float("inf")
@@ -496,18 +507,45 @@ class Rectangle(Polygon):
         self,
         show_id=True,
         show_edges_id=True,
-        show_error_bounds=False,
+        show_full=False,
+        show_actual_errors=False,
         ax=None,
         as_goal=False,
     ):
-        if show_error_bounds:
-            A, b = self.as_poly["original"].A, self.as_poly["original"].b
-            e_l, e_r = self.get_error_bounds()
-            e = np.array(self.actual_errors)
-            pc.Polytope(A, b + e_l).plot(ax=ax, alpha=0.2, linewidth=2, color="dimgrey")
-            pc.Polytope(A, b + e_r).plot(ax=ax, alpha=0.2, linewidth=2, color="dimgrey")
-            pc.Polytope(A, b + e).plot(
-                ax=ax, alpha=0.6, color="cornflowerblue", linewidth=2, linestyle="-"
+        if show_full:
+            self.as_poly["full"].plot(
+                ax=ax,
+                alpha=0.8,
+                color="cornflowerblue",
+                edgecolor="None",
+                linestyle="-",
+            )
+
+        if show_actual_errors:
+            self.as_poly["actual"].plot(
+                ax=ax,
+                alpha=0.8,
+                color="cornflowerblue",
+                linewidth=2,
+                edgecolor="None",
+                linestyle="-",
+            )
+        if not as_goal:
+            self.as_poly["worst"].plot(
+                ax=ax,
+                alpha=1.0,
+                linewidth=1.3,
+                edgecolor="k",
+                color="None",
+                linestyle="--",
+            )
+            self.as_poly["best"].plot(
+                ax=ax,
+                alpha=1.0,
+                linewidth=1.3,
+                edgecolor="k",
+                color="None",
+                linestyle="--",
             )
         super().plot(
             show_id=show_id, show_edges_id=show_edges_id, as_goal=as_goal, mask=True
